@@ -1,3 +1,186 @@
+/* Home page styles */
+.home-bg {
+  min-height: 100vh;
+  background: #f6fafd;
+  padding-top: 40px;
+}
+
+.home-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.home-header h1 {
+  color: #0077b6;
+  font-size: 2.3rem;
+  margin: 0;
+}
+
+.home-main {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.home-section {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+  padding: 2rem 1.5rem 1.5rem 1.5rem;
+  min-width: 260px;
+  max-width: 320px;
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.home-section h2 {
+  color: #023e8a;
+  margin-bottom: 0.7rem;
+  font-size: 1.4rem;
+}
+
+.home-section p {
+  color: #444;
+  margin-bottom: 1.2rem;
+  text-align: center;
+}
+
+.home-btn {
+  background: #0077b6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.home-btn:hover {
+  background: #023e8a;
+}
+
+@media (max-width: 900px) {
+  .home-main {
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  .home-section {
+    min-width: 220px;
+    max-width: 95vw;
+  }
+}
+body, html, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+}
+
+.login-bg {
+  min-height: 100vh;
+  background: #fff;
+  position: relative;
+}
+
+.login-logo {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: none;
+  width: 220px;
+  height: auto;
+  z-index: 10;
+  background: #fff;
+  border-radius: 0 30px 30px 0;
+
+  padding: 2.5rem 2rem 2.5rem 0.7rem;
+}
+
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-form {
+  background: #fff;
+  padding: 2.2rem 1.7rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  min-width: 320px;
+  max-width: 350px;
+  width: 100%;
+  border: 1px solid #e0e0e0;
+}
+
+.login-form h1 {
+  margin-bottom: 2rem;
+  text-align: center;
+  color: #0077b6;
+  font-size: 2rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  margin-bottom: 0.6rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input {
+  padding: 0.7rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+  background: #fafafa;
+  transition: border 0.2s;
+  color: #111;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #111 !important;
+  caret-color: #111 !important;
+  box-shadow: 0 0 0 1000px #fafafa inset !important;
+  background-color: #fafafa !important;
+  color: #111 !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.form-group input:focus {
+  border: 1.5px solid #0077b6;
+  outline: none;
+}
+
+.login-form button {
+  width: 100%;
+  padding: 0.8rem;
+  background: #0077b6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.login-form button:hover {
+  background: #023e8a;
+}
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -6,8 +189,8 @@
 }
 
 .logo {
-  height: 6em;
-  padding: 1.5em;
+  height: 15em;
+  padding: 15em;
   will-change: filter;
   transition: filter 300ms;
 }
