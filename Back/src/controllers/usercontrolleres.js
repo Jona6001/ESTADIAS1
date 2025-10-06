@@ -1,3 +1,34 @@
+const { generarToken } = require("../config/auth");
+// Controlador para login
+async function login(req, res) {
+  const { correo, contrasena } = req.body;
+  if (!correo || !contrasena) {
+    return res.status(400).json({ message: "Correo y contraseña requeridos" });
+  }
+  try {
+    const usuario = await Usuario.findOne({ where: { correo } });
+    if (!usuario) {
+      return res.status(401).json({ message: "Usuario no encontrado" });
+    }
+    const passwordValida = await bcrypt.compare(contrasena, usuario.contrasena);
+    if (!passwordValida) {
+      return res.status(401).json({ message: "Contraseña incorrecta" });
+    }
+    const { contrasena: _, ...userData } = usuario.toJSON();
+    // Generar token JWT
+    const token = generarToken(usuario);
+    res.json({
+      message: "Login exitoso.",
+      user: userData,
+      token,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error en el servidor",
+      error: error.message,
+    });
+  }
+}
 const Usuario = require("../models/Usermodel");
 const bcrypt = require("bcrypt");
 
@@ -63,4 +94,5 @@ async function inicializarPrimerUsuario() {
 module.exports = {
   crearPrimerUsuario,
   inicializarPrimerUsuario,
+  login,
 };
