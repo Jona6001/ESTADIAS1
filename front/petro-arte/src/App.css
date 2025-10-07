@@ -201,24 +201,26 @@ body, html, #root {
   overflow-x: hidden;
 }
 
+
 /* Login section */
 .login-bg {
   min-height: 100vh;
   background: #fff;
   position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .login-logo {
   position: fixed;
   top: 0;
   left: 0;
-  transform: none;
   width: 220px;
   height: auto;
   z-index: 10;
   background: #fff;
   border-radius: 0 30px 30px 0;
-
   padding: 2.5rem 2rem 2.5rem 0.7rem;
 }
 
@@ -226,6 +228,7 @@ body, html, #root {
   min-height: 100vh;
   display: flex;
   align-items: center;
+  justify-content: center; /* ✅ centra horizontalmente */
   width: 100%;
 }
 
@@ -233,7 +236,7 @@ body, html, #root {
   background: #fff;
   padding: 2.2rem 1.7rem;
   border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
   min-width: 320px;
   max-width: 350px;
   width: 100%;
@@ -243,7 +246,7 @@ body, html, #root {
 .login-form h1 {
   margin-bottom: 2rem;
   text-align: center;
-  color: #0077b6;
+  color: #7b1531; /* ✅ guinda */
   font-size: 2rem;
 }
 
@@ -269,27 +272,15 @@ body, html, #root {
   color: #111;
 }
 
-input:-webkit-autofill,
-input:-webkit-autofill:focus,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:active {
-  -webkit-text-fill-color: #111 !important;
-  caret-color: #111 !important;
-  box-shadow: 0 0 0 1000px #fafafa inset !important;
-  background-color: #fafafa !important;
-  color: #111 !important;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
 .form-group input:focus {
-  border: 1.5px solid #0077b6;
+  border: 1.5px solid #a30015; /* ✅ guinda brillante */
   outline: none;
 }
 
 .login-form button {
   width: 100%;
   padding: 0.8rem;
-  background: #0077b6;
+  background: #7b1531; /* ✅ color del navbar */
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -300,14 +291,16 @@ input:-webkit-autofill:active {
 }
 
 .login-form button:hover {
-  background: #023e8a;
+  background: #a30015; /* tono más claro al pasar el mouse */
 }
+
 #root {
   width: 100vw;
   margin: 0;
   padding: 0;
   text-align: initial;
 }
+
 
 .logo {
   height: 15em;
