@@ -3,19 +3,68 @@
 .nav-logo {
   display: flex;
   flex-direction: column; 
-  align-items: flex-start; /* alineado a la izquierda */
+  align-items: flex-start;
+  
 }
 
 .nav-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* espacio entre logo y texto */
+  gap: 0.5rem; 
 }
 
 .nav-left img {
   height: 38px;
   width: auto;
+  margin-left: 1.5rem;
 }
+
+/* Logo que funciona como botón móvil */
+.mobile-menu-toggle {
+  cursor: pointer;
+}
+
+/* Solo visible en pantallas pequeñas */
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  gap: 0.3rem;
+  position: absolute;
+  top: 60px; /* justo debajo del navbar */
+  left: 0;
+  background: #7b1531;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0 8px 8px;
+  z-index: 150;
+}
+
+/* Cuando está abierto, se muestra */
+@media (max-width: 768px) {
+  .mobile-menu {
+    display: flex;
+  }
+
+  /* Ocultar los botones normales en móvil */
+  .nav-center {
+    display: none;
+  }
+}
+/* Botones dentro del menu movil */
+.mobile-menu .nav-btn {
+  color: #fff;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 1rem;
+  padding: 0.5rem 0;
+  cursor: pointer;
+}
+
+.mobile-menu .nav-btn:hover {
+  background: #a30015;
+  border-radius: 4px;
+}
+
 
 
 /* Navbar styles */
@@ -28,16 +77,22 @@
 }
 
 .nav-container {
-  max-width: 1200px;      /* contenido limitado */
+  max-width: 1200px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.3rem 1rem;
+  position: relative; /* necesario para centrar los botones */
+  padding: 0.3rem 0.9rem;
 }
 
-
-
+.nav-center {
+  display: flex;
+  gap: 0.3rem;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%); /* centra exactamente en medio */
+}
 
 
 .nav-title {
@@ -48,73 +103,205 @@
   cursor: pointer;
   letter-spacing: 1px;
 }
-.nav-center {
-  display: flex;
-  gap: 0.3rem;
-}
+/* Botones de navegación */
 .nav-btn {
   background: none;
-  border: none;
+  border: 1px solid transparent; /* borde invisible por defecto */
   color: #fff;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   padding: 0.4rem 0.7rem;
   border-radius: 6px;
-  transition: background 0.2s, color 0.2s;
-}
-.nav-btn:hover {
-  background: #a30015;
-  color: #fff;
-}
-.nav-user {
-  position: relative;
-  margin-right: 1rem; /* 👈 separa del borde derecho */
+  transition: border 0.2s, color 0.2s;
 }
 
+.nav-btn:hover {
+  border: 1.5px solid #ffffff; /* borde negro al pasar el mouse */
+  color: #fff;
+}
+
+/* Botón de usuario */
 .user-btn {
-  background: #a30015;
-  border: none;
+  background: #a30015;       
+  border: 1px solid transparent; /* borde invisible */
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 45.5px;               
+  height: 45.5px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.2s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: border 0.2s, background 0.2s, transform 0.2s;
+  box-shadow: 0 2px 2px rgba(255, 255, 255, 0.15);
+  padding: 0;
 }
+
 .user-btn:hover {
-  background: #7b1531;
+  border: 2px solid #fff;   
+  background: #7b1531;       
+  transform: scale(1.1);
 }
+
+/* Menú de usuario */
 .user-menu {
   position: absolute;
-  top: 38px;
-  right: 0;
+  top: 75px;
+  right: 0px;
+  transform: translateX(-18px);
   background: #fff;
-  border-radius: 8px;
+  border-radius: 9px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.13);
-  min-width: 130px;
+  min-width: 140px;
   display: flex;
   flex-direction: column;
-  padding: 0.3rem 0;
-  z-index: 200;
+  padding: 0.6rem 0.3rem;
+  z-index: 100;
+  border: 1px solid #000000; /* borde negro para resaltar */
+  animation: slideDown 0.25s ease-out;
 }
+
 .user-menu button {
   background: none;
   border: none;
   color: #7b1531;
   font-size: 0.97rem;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1rem;
   text-align: left;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.1s, color 0.1s, border-left 0.2s, box-shadow 0.2s;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
 }
+
 .user-menu button:hover {
-  background: #f8e6ed;
+  background: #fde8eb;
   color: #a30015;
+  border-left: 4px solid #a30015;
+  border-right: 4px solid #a30015;
+  box-shadow: inset 2px 0 5px rgba(0,0,0,0.1);
 }
+
+/* Animación de aparición hacia abajo (mantiene posición X) */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-18px) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-18px) translateY(0);
+  }
+}
+
+
+
+
+
+/* Móvil: ocultar menú central solo */
+@media (max-width: 768px) {
+  .nav-center {        /* botones del centro */
+    display: none;
+  }
+
+  /* Logo como botón desplegable */
+  .mobile-menu-toggle {
+    cursor: pointer;
+  }
+
+/* Menú móvil con animación de despliegue */
+.mobile-menu {
+  position: absolute;
+  top: 73.4px;
+  left: 30px;
+  width: 100px;
+  background: #7b1531;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  z-index: 150;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  /* Estado cerrado */
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-8px) scaleY(0.98);
+  transform-origin: top;
+  padding: 0 0;
+  transition:
+    max-height 340ms cubic-bezier(.2,.8,.2,1),
+    opacity 220ms ease,
+    transform 280ms cubic-bezier(.2,.8,.2,1),
+    padding 260ms ease;
+}
+
+/* Estado abierto (animado) */
+.mobile-menu.open {
+  max-height: 260px;
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  padding: 0.4rem 0rem;
+}
+
+/* Botones del menú móvil */
+.mobile-menu .nav-btn {
+  color: #fff;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.18s ease, transform 0.12s;
+  width: 100%;
+}
+
+.mobile-menu .nav-btn:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+/* Ocultar menú móvil en pantallas grandes */
+@media (min-width: 769px) {
+  .mobile-menu {
+    display: none !important;
+  }
+}
+
+/* Solo oculta el centro en pantallas pequeñas */
+@media (max-width: 768px) {
+  .nav-center {
+    display: none;
+  }
+}
+
+
+  .mobile-menu .nav-btn {
+    color: #fff;
+    background: none;
+    border: none;
+    text-align: center;
+    font-size: 1rem;
+    padding: 0.5rem 0;
+    cursor: pointer;
+    border-radius: 9px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .mobile-menu .nav-btn:hover {
+    background: #a30015;
+    color: #fff;
+  }
+}
+
+
+
+
+
+
 /* Home page styles */
 .home-bg {
   min-height: 100vh;
@@ -202,6 +389,11 @@ body, html, #root {
 }
 
 
+
+
+
+
+
 /* Login section */
 .login-bg {
   min-height: 100vh;
@@ -276,7 +468,7 @@ body, html, #root {
   border: 1.5px solid #a30015; /* ✅ guinda brillante */
   outline: none;
 }
-/* --- Evita que el autocompletado cambie el color del texto o fondo --- */
+
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
