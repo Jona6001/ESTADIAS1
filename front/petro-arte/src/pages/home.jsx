@@ -46,8 +46,12 @@ const Home = () => {
                 alt="Logo"
                 className="logo-img"
               />
-              <div className="nav-title">Panel Principal</div>
-            </div>
+              <div className="nav-title">INICIO</div>
+            </div> 
+            
+      <header className="header">
+        <h1>PANEL PRINCIPAL</h1>
+      </header>
 
             {/* Menú desplegable móvil */}
             <div className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}>
@@ -82,9 +86,6 @@ const Home = () => {
 
 
 
-      <header className="home-header">
-        <h1>Panel Principal</h1>
-      </header>
 
       <main className="home-main">
         {/* Contenido principal */}
