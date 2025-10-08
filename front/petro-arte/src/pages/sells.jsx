@@ -15,7 +15,6 @@ const Sells = () => {
   const handleConfig = () => {
     alert("Configuración (en construcción)");
   };
-
   return (
     <div>
       <nav className="main-navbar guinda-navbar">
