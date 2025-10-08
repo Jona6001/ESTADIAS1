@@ -1,11 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
 export default defineConfig({
-  base: '/ESTADIAS1/',
-    build: {
-    outDir: 'docs',
+  base: '/ESTADIAS1/', // <-- esto es correcto para tu repo
+  build: {
+    outDir: 'docs',    // <-- esto es correcto para GitHub Pages
   },
   plugins: [react()],
 });
