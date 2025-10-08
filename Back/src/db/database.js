@@ -1,22 +1,22 @@
-const { Sequelize } = require('sequelize');
-require('dotenv').config();
+const { Sequelize } = require("sequelize");
 
 const sequelize = new Sequelize(
-  process.env.DB_NAME || 'petroarte',
-  process.env.DB_USER || 'root',
-  process.env.DB_PASSWORD || '',
+  "railway",
+  "root",
+  "cOUmZJyFqXooeTiXkTUHCoHCpypMFzLu",
   {
-    host: process.env.DB_HOST || 'localhost',
-    dialect: 'mysql',
+    host: "turntable.proxy.rlwy.net",
+    port: 46223,
+    dialect: "mysql",
   }
 );
 
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    console.log('Conexión a la base de datos exitosa.');
+    console.log("✅ Conexión a la base de datos en Railway exitosa.");
   } catch (error) {
-    console.error('No se pudo conectar a la base de datos:', error);
+    console.error("❌ No se pudo conectar a la base de datos:", error);
   }
 };
 

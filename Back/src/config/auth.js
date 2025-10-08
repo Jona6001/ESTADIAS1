@@ -20,7 +20,7 @@ function generarToken(usuario) {
 
 // Middleware para validar el token
 function validarToken(req, res, next) {
-  const token = req.headers["authorization"];
+  const token = req.headers["authorization"]?.replace("Bearer ", "");
 
   if (!token) {
     return res.status(401).json({ mensaje: "Token no proporcionado" });
