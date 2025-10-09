@@ -32,8 +32,14 @@ const Users = () => {
                 alt="Logo"
                 className="logo-img"
               />
-              <div className="nav-title">Panel Principal</div>
+              <div className="nav-title">Usuarios</div>
             </div>
+
+            <header className="header">
+            <h1 center>USUARIOS</h1>
+          </header>
+
+
             {/* Menú desplegable móvil */}
             <div className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}>
              
