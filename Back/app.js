@@ -12,7 +12,7 @@ app.use(express.json());
 
 // Rutas
 const authRoutes = require("./src/routes/authRoutes");
-app.use(authRoutes);
+app.use("/api", authRoutes);
 // ...existing code...
 
 // ...existing code...

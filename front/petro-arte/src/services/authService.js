@@ -1,13 +1,16 @@
 // Servicio para login
-import axios from "axios";
-
-const API_URL = "http://localhost:3000";
-
-export const loginUser = async (email, password) => {
-  try {
-    const res = await axios.post(`${API_URL}/login`, { email, password });
-    return res.data;
-  } catch (err) {
-    throw err.response?.data || { message: "Error de conexión" };
+export async function loginUser(email, password) {
+  const res = await fetch("http://localhost:3000/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      correo: email,         // <-- debe ser 'correo'
+      contrasena: password,  // <-- debe ser 'contrasena'
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.message || "Error de autenticación");
   }
-};
+  return await res.json();
+}

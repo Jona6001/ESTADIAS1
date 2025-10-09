@@ -6,6 +6,7 @@ const {
   modificarUsuario,
 } = require("../controllers/usercontrolleres");
 const { validarToken } = require("../config/auth");
+const { eliminarUsuario } = require('../controllers/usercontrolleres');
 
 router.post("/login", login);
 
