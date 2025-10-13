@@ -10,27 +10,29 @@ const Login = () => {
 	const [password, setPassword] = useState("");
 	const navigate = useNavigate();
 
-	const handleSubmit = async (e) => {
-		e.preventDefault();
-		try {
-			const res = await loginUser(email, password);
-			await Swal.fire({
-				title: '¡Bienvenido!',
-				text: res.user?.nombre ? `Hola, ${res.user.nombre}` : 'Login exitoso',
-				icon: 'success',
-				confirmButtonColor: '#0077b6',
-				background: '#f8f9fa',
-			});
-			navigate("/home");
-		} catch (err) {
-			Swal.fire({
-				title: 'Error',
-				text: err.message || 'Error de autenticación',
-				icon: 'error',
-				confirmButtonColor: '#d90429',
-				background: '#fff',
-			});
-		}
+		const handleSubmit = async (e) => {
+	  e.preventDefault();
+	  try {
+		const res = await loginUser(email, password);
+		// Guarda el usuario en localStorage
+		localStorage.setItem("user", JSON.stringify(res.user));
+		await Swal.fire({
+		  title: '¡Bienvenido!',
+		  text: res.user?.nombre ? `Hola, ${res.user.nombre}` : 'Login exitoso',
+		  icon: 'success',
+		  confirmButtonColor: '#0077b6',
+		  background: '#f8f9fa',
+		});
+		navigate("/home");
+	  } catch (err) {
+		Swal.fire({
+		  title: 'Error',
+		  text: err.message || 'Error de autenticación',
+		  icon: 'error',
+		  confirmButtonColor: '#d90429',
+		  background: '#fff',
+		});
+	  }
 	};
 
 		return (
