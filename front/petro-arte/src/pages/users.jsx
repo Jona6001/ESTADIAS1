@@ -80,12 +80,19 @@ const Users = () => {
     setEditingUser(null);
   };
 
-  // Eliminar usuario
-  const handleDelete = (id) => {
-    if (window.confirm("¿Seguro que quieres eliminar este usuario?")) {
-      setUsers(users.filter(u => u.id !== id));
-    }
-  };
+const handleDeactivate = (id) => {
+  if (window.confirm("¿Seguro que quieres desactivar este usuario?")) {
+    setUsers(users.map(u => u.id === id ? { ...u, status: false } : u));
+    // Aquí deberías hacer la petición al backend para desactivar realmente el usuario
+  }
+};
+
+const handleReactivate = (id) => {
+  if (window.confirm("¿Seguro que quieres reactivar este usuario?")) {
+    setUsers(users.map(u => u.id === id ? { ...u, status: true } : u));
+    // Aquí deberías hacer la petición al backend para reactivar realmente el usuario
+  }
+};
 
   const [showAddModal, setShowAddModal] = useState(false);
   return (
@@ -199,74 +206,102 @@ const Users = () => {
       </form>
     </div>
   </div>
+)} 
+
+{/* Tabla de usuarios */}
+<table className="users-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Usuario</th>
+      <th>Email</th>
+      <th>Rol</th>
+      <th>Estado</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {users.length === 0 ? (
+      <tr><td colSpan="6">No hay usuarios registrados</td></tr>
+    ) : (
+      users.map(user => (
+        <tr key={user.id}>
+          <td>{user.id}</td>
+          <td>
+            {editingUser?.id === user.id ? (
+              <input
+                type="text"
+                value={editingUser.username}
+                onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+              />
+            ) : (
+              user.username
+            )}
+          </td>
+          <td>
+            {editingUser?.id === user.id ? (
+              <input
+                type="email"
+                value={editingUser.email}
+                onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+              />
+            ) : (
+              user.email
+            )}
+          </td>
+          <td>
+            {editingUser?.id === user.id ? (
+              <select
+                value={editingUser.rol}
+                onChange={(e) => setEditingUser({ ...editingUser, rol: e.target.value })}
+              >
+                <option value="Administrador">Administrador</option>
+                <option value="Empleado">Empleado</option>
+              </select>
+            ) : (
+              user.rol
+            )}
+          </td>
+          <td>
+            {user.status === false ? (
+              <span style={{ color: "#d90429", fontWeight: "bold" }}>Desactivado</span>
+            ) : (
+              <span style={{ color: "#2ecc40", fontWeight: "bold" }}>Activo</span>
+            )}
+          </td>
+          <td>
+            {editingUser?.id === user.id ? (
+              <button className="save-btn" onClick={handleSaveEdit}><FaSave /></button>
+            ) : (
+              <button className="edit-btn" onClick={() => handleEdit(user)}><FaEdit /></button>
+            )}
+            {/* Solo permite desactivar/reactivar si NO es el usuario actual */}
+       {user.id !== JSON.parse(localStorage.getItem("user"))?.id && (
+  user.status === false ? (
+    <button 
+      className="action-btn reactivate-btn" 
+      onClick={() => handleReactivate(user.id)}
+      title="Reactivar usuario"
+    >
+      <FaPlus />
+    </button>
+  ) : (
+    <button 
+      className="action-btn delete-btn" 
+      onClick={() => handleDeactivate(user.id)}
+      title="Desactivar usuario"
+    >
+      <FaTrashAlt />
+    </button>
+  )
 )}
 
-        {/* Tabla de usuarios */}
-        <table className="users-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Usuario</th>
-              <th>Email</th>
-              <th>Rol</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
-              <tr><td colSpan="5">No hay usuarios registrados</td></tr>
-            ) : (
-              users.map(user => (
-                <tr key={user.id}>
-                  <td>{user.id}</td>
-                  <td>
-                    {editingUser?.id === user.id ? (
-                      <input
-                        type="text"
-                        value={editingUser.username}
-                        onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
-                      />
-                    ) : (
-                      user.username
-                    )}
-                  </td>
-                  <td>
-                    {editingUser?.id === user.id ? (
-                      <input
-                        type="email"
-                        value={editingUser.email}
-                        onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                      />
-                    ) : (
-                      user.email
-                    )}
-                  </td>
-                  <td>
-                    {editingUser?.id === user.id ? (
-                      <select
-                        value={editingUser.rol}
-                        onChange={(e) => setEditingUser({ ...editingUser, rol: e.target.value })}
-                      >
-                        <option value="Administrador">Administrador</option>
-                        <option value="Empleado">Empleado</option>
-                      </select>
-                    ) : (
-                      user.rol
-                    )}
-                  </td>
-                  <td>
-                    {editingUser?.id === user.id ? (
-                      <button className="save-btn" onClick={handleSaveEdit}><FaSave /></button>
-                    ) : (
-                      <button className="edit-btn" onClick={() => handleEdit(user)}><FaEdit /></button>
-                    )}
-                    <button className="delete-btn" onClick={() => handleDelete(user.id)}><FaTrashAlt /></button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+          </td>
+        </tr>
+      ))
+    )}
+  </tbody>
+</table>
       </main>
     </div>
   );

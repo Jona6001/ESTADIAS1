@@ -326,7 +326,7 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   white-space: nowrap;
     margin-left: auto; /* empuja el elemento hacia la derecha */
-  margin-right: -3rem; /* ajusta la distancia al usuario */
+  margin-right: -3.7rem; /* ajusta la distancia al usuario */
 }
 
 /* Ajuste responsive */
@@ -698,120 +698,133 @@ input:-webkit-autofill:active {
 
 /* Pantalla Usuarios */
 
-/* ---------- FORMULARIO DE USUARIOS ---------- */
-.users-container {
-  padding: 2rem;
-  text-align: center;
+/* === BOTÓN ABRIR MODAL === */
+.open-add-modal-btn {
+  background: linear-gradient(135deg, #a30015, #c41e3a);
   color: #fff;
-}
-
-/* Fondo del modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.45);
+  font-weight: 600;
+  font-size: 1rem;
+  border: none;
+  border-radius: 10px;
+  padding: 0.8rem 1.5rem;
+  cursor: pointer;
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin: 20px auto 25px auto; /* centrado horizontal y espacio con contenido */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.25s ease-in-out;
+}
+
+.open-add-modal-btn:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #7b0012, #a30015);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* === FONDO DEL MODAL === */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
   justify-content: center;
-  z-index: 1000;
+  align-items: center;
+  z-index: 2000;
   animation: fadeIn 0.3s ease;
 }
 
-/* Caja del modal */
+/* === CONTENEDOR DEL MODAL === */
 .modal-content {
-  background: #fff;
+  background: #ffffff;
   padding: 2rem;
-  border-radius: 12px;
+  border-radius: 16px;
   width: 90%;
   max-width: 420px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.3s ease;
   text-align: left;
-  animation: slideIn 0.3s ease;
 }
 
-/* Inputs y etiquetas */
-.user-form label {
-  font-weight: bold;
-  display: block;
-  margin-bottom: 5px;
-  color: #5b0018;
+/* === TÍTULO DEL MODAL === */
+.modal-content h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #111; /* texto negro */
+}
+
+/* === FORMULARIO === */
+.user-form {
+  display: flex;
+  flex-direction: column;
 }
 
 .user-input {
-  width: 100%;
-  padding: 0.7rem 1rem;
-  margin-bottom: 1rem;
+  background: #f9f9f9;
   border: 1.5px solid #ccc;
   border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
   font-size: 1rem;
+  color: #111; /* texto negro */
   transition: all 0.2s ease;
+}
+
+.user-input::placeholder {
+  color: #666;
 }
 
 .user-input:focus {
   outline: none;
   border-color: #a30015;
-  box-shadow: 0 0 4px rgba(163, 0, 21, 0.3);
+  background: #fff;
+  box-shadow: 0 0 6px rgba(163, 0, 21, 0.3);
 }
 
-/* Botones */
-.open-add-modal-btn {
-  background: #a30015;
-  color: white;
-  font-weight: bold;
-  border: none;
+/* === BOTONES DENTRO DEL MODAL === */
+.add-btn,
+.cancel-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
   border-radius: 8px;
-  padding: 0.8rem 1.4rem;
+  border: none;
   cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.open-add-modal-btn:hover {
-  background: #c21b2e;
-}
-
-.modal-buttons {
-  display: flex;
-  justify-content: space-between;
+  font-weight: 600;
+  transition: all 0.25s ease-in-out;
 }
 
 .add-btn {
   background: #5b0018;
-  color: white;
-  border: none;
-  padding: 0.7rem 1.4rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
+  color: #fff;
+  margin-bottom: 0.6rem;
 }
 
 .add-btn:hover {
   background: #7b1531;
+  transform: scale(1.03);
 }
 
 .cancel-btn {
-  background: #ccc;
+  background: #e5e5e5;
   color: #222;
-  border: none;
-  padding: 0.7rem 1.4rem;
-  border-radius: 8px;
-  cursor: pointer;
 }
 
 .cancel-btn:hover {
-  background: #bbb;
+  background: #d3d3d3;
+  transform: scale(1.02);
 }
 
-/* Animaciones */
+/* === ANIMACIONES === */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-@keyframes slideIn {
-  from { transform: translateY(-30px); opacity: 0; }
+@keyframes slideUp {
+  from { transform: translateY(25px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
@@ -819,61 +832,185 @@ input:-webkit-autofill:active {
 /* ---------- TABLA ---------- */
 .users-table {
   width: 90%;
-  margin: 0 auto;
+  margin: 30px auto;
   border-collapse: collapse;
   background-color: #fff;
-  color: #333;
-  border-radius: 10px;
+  color: #222;
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  font-family: "Segoe UI", sans-serif;
 }
 
+/* Encabezado */
 .users-table th {
   background-color: #7b1531;
-  color: white;
-  padding: 12px;
+  color: #fff;
+  padding: 14px;
   font-size: 1rem;
+  text-align: left;
+  letter-spacing: 0.5px;
 }
 
+/* Celdas */
 .users-table td {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95rem;
 }
 
+/* Fila al pasar el cursor */
 .users-table tr:hover {
-  background-color: #f9f9f9;
+  background-color: #f6f6f6;
 }
 
-.edit-btn, .delete-btn, .save-btn {
+/* Columna de Acciones */
+.users-table td:last-child,
+.users-table th:last-child {
+  text-align: center;
+  width: 150px; /* Mantiene tamaño uniforme */
+}
+
+/* ---------- BOTONES DE ACCIÓN ---------- */
+.edit-btn,
+.delete-btn,
+.save-btn {
   border: none;
   cursor: pointer;
   margin: 0 5px;
-  padding: 6px 8px;
-  border-radius: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 15px;
+  transition: all 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* Botón editar */
 .edit-btn {
-  background-color: #ffa500;
-  color: white;
+  background-color: #f39c12;
+  color: #fff;
+}
+.edit-btn:hover {
+  background-color: #e67e22;
+  transform: translateY(-2px);
 }
 
+/* Botón guardar */
 .save-btn {
   background-color: #007bff;
-  color: white;
+  color: #fff;
 }
-
-.delete-btn {
-  background-color: #c0392b;
-  color: white;
-}
-
-.edit-btn:hover {
-  background-color: #ff8c00;
-}
-
 .save-btn:hover {
   background-color: #0056b3;
+  transform: translateY(-2px);
+}
+
+/* Botón eliminar */
+/* ---------- BOTÓN ELIMINAR ---------- */
+.delete-btn {
+  background-color: #a30015;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-left: 12px; /* 🔹 Más separación del botón anterior */
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 6px rgba(163, 0, 21, 0.2);
 }
 
 .delete-btn:hover {
-  background-color: #e74c3c;
+  background-color: #7b1531;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(123, 21, 49, 0.3);
+}
+
+/* ---------- BOTÓN REACTIVAR / DESACTIVAR ---------- */
+.reactivate-btn {
+  background-color: #2ecc40;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px; /* igual que el delete-btn */
+  font-weight: 600;
+  font-size: 1rem; /* mismo tamaño de fuente */
+  cursor: pointer;
+  margin-left: 12px; /* misma separación */
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 6px rgba(46, 204, 64, 0.2);
+  display: inline-flex; /* centra el icono */
+  align-items: center;
+  justify-content: center;
+  gap: 6px; /* si luego agregas texto o más íconos */
+  width: auto;
+  height: auto;
+}
+
+.reactivate-btn:hover {
+  background-color: #27ae60;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3);
+}
+
+.reactivate-btn svg {
+  font-size: 1rem; /* iguala tamaño del ícono con el texto */
+}
+
+
+/* ---------- INPUTS EN EDICIÓN ---------- */
+.users-table input,
+.users-table select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #222;
+  background-color: #fafafa;
+  transition: all 0.2s ease;
+}
+
+.users-table input:focus,
+.users-table select:focus {
+  border-color: #7b1531;
+  box-shadow: 0 0 4px rgba(123, 21, 49, 0.25);
+  outline: none;
+  background-color: #fff;
+}
+
+/* ---------- ESTILO PARA CELDA SIN USUARIOS ---------- */
+.users-table td[colspan="5"] {
+  text-align: center;
+  padding: 24px;
+  font-style: italic;
+  color: #666;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+  .users-table {
+    width: 100%;
+    font-size: 14px;
+  }
+
+  .users-table th,
+  .users-table td {
+    padding: 10px;
+  }
+
+  .users-table td:last-child {
+    display: flex;
+    justify-content: center;
+  }
+
+  .edit-btn,
+  .save-btn,
+  .delete-btn {
+    font-size: 14px;
+    padding: 6px 8px;
+  }
 }
