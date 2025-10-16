@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../App.css";
 import { useNavigate } from "react-router-dom";
-import { FaUser, FaHome } from "react-icons/fa";
+import { FaUser, FaHome, FaBoxes, FaChartBar, FaReceipt } from "react-icons/fa";
 
 const Home = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userName, setUserName] = useState("");
-  const [dateStr, setDateStr] = useState("");  
-  const [timeStr, setTimeStr] = useState("");  
+  const [dateStr, setDateStr] = useState("");
+  const [timeStr, setTimeStr] = useState("");
   const menuRef = useRef();
   const navigate = useNavigate();
 
@@ -17,7 +17,7 @@ const Home = () => {
     if (user && user.nombre) setUserName(user.nombre);
   }, []);
 
-  // 🔹 Fecha y hora actualizadas cada segundo
+  // Fecha y hora
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -30,6 +30,7 @@ const Home = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Cerrar menú usuario al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
@@ -50,14 +51,33 @@ const Home = () => {
     alert("Configuración próximamente");
   };
 
+  // Datos simulados para la UI
+  const recentSales = [
+    { id: "V-1023", cliente: "Cliente A", total: 2450.5, fecha: "2025-10-16 12:40" },
+    { id: "V-1022", cliente: "Cliente B", total: 1320.0, fecha: "2025-10-16 11:18" },
+    { id: "V-1021", cliente: "Cliente C", total: 980.0,  fecha: "2025-10-16 10:05" },
+    { id: "V-1020", cliente: "Cliente D", total: 1540.2, fecha: "2025-10-16 09:31" },
+  ];
+
+  const chartData = [
+    { label: "Lun", value: 12 },
+    { label: "Mar", value: 18 },
+    { label: "Mié", value: 9 },
+    { label: "Jue", value: 15 },
+    { label: "Vie", value: 22 },
+    { label: "Sáb", value: 17 },
+    { label: "Dom", value: 7 },
+  ];
+  const maxValue = Math.max(...chartData.map(d => d.value)) || 1;
+
   return (
     <div className="home-bg">
       <nav className="main-navbar guinda-navbar">
         <div className="nav-container">
-          {/* Logo que funciona como botón móvil */}
+          {/* Izquierda: logo + título + menú móvil */}
           <div className="nav-left">
-            <div 
-              className="nav-logo mobile-menu-toggle" 
+            <div
+              className="nav-logo mobile-menu-toggle"
               onClick={() => setMobileMenuOpen(v => !v)}
             >
               <img
@@ -66,38 +86,39 @@ const Home = () => {
                 className="logo-img"
               />
               <div className="nav-title">INICIO</div>
-            </div> 
+            </div>
             <header className="header">
-              <h1>INICIO <FaHome  className="iconName" /></h1>
+              <h1>INICIO <FaHome className="iconName" /></h1>
             </header>
-            {/* Menú desplegable móvil */}
             <div className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}>
               <button className="nav-btn" onClick={() => navigate("/ventas")}>Ventas</button>
               <button className="nav-btn" onClick={() => navigate("/clientes")}>Clientes</button>
               <button className="nav-btn" onClick={() => navigate("/usuarios")}>Usuarios</button>
             </div>
           </div>
-          {/* Botones normales (ocultos en móvil) */}
+
+          {/* Centro: navegación (oculto en móvil) */}
           <div className="nav-center">
             <button className="nav-btn" onClick={() => navigate("/ventas")}>Ventas</button>
             <button className="nav-btn" onClick={() => navigate("/clientes")}>Clientes</button>
             <button className="nav-btn" onClick={() => navigate("/usuarios")}>Usuarios</button>
           </div>
-          {/* FECHA Y HORA */}
+
+          {/* Derecha: fecha/hora + usuario */}
           <div className="nav-datetime">
             <span>{dateStr}</span>
             <span>{timeStr}</span>
           </div>
-          {/* Botón usuario */}
-       <div className="nav-user" ref={menuRef}>
-        <button className="user-btn" onClick={() => setMenuOpen(v => !v)}>
-          <FaUser size={28} color="#fff" />
-        </button>
-        {userName && (
-          <span className="user-name" style={{ color: "#fff", fontWeight: "bold", whiteSpace: "nowrap" }}>
-            {userName}
-          </span>
-        )}
+
+          <div className="nav-user" ref={menuRef}>
+            <button className="user-btn" onClick={() => setMenuOpen(v => !v)}>
+              <FaUser size={28} color="#fff" />
+            </button>
+            {userName && (
+              <span className="user-name" style={{ color: "#fff", fontWeight: "bold", whiteSpace: "nowrap" }}>
+                {userName}
+              </span>
+            )}
             {menuOpen && (
               <div className="user-menu">
                 <button onClick={handleConfig}>Configuración</button>
@@ -108,9 +129,70 @@ const Home = () => {
         </div>
       </nav>
 
-      
-      <main className="home-main">
-        {/* Contenido principal */}
+      {/* Dashboard Home */}
+      <main className="home-dashboard">
+        {/* Izquierda: botón Inventario */}
+        <section className="home-left">
+          <button
+            className="home-card home-card-action inventory-card"
+            onClick={() => navigate("/inventario")}
+            title="Ir a Inventario"
+          >
+            <span className="home-card-icon"><FaBoxes size={28} /></span>
+            <div className="home-card-text">
+              <h3>Inventario</h3>
+              <p>Administrar productos y existencias</p>
+            </div>
+          </button>
+        </section>
+
+        {/* Derecha: Ventas recientes (arriba) + Estadísticas (abajo) */}
+        <aside className="home-right">
+          <div className="card recent-sales">
+            <div className="card-header">
+              <FaReceipt size={18} />
+              <h4>Ventas recientes</h4>
+            </div>
+            <ul className="sales-list">
+              {recentSales.map(s => (
+                <li key={s.id} className="sale-item">
+                  <div className="sale-left">
+                    <span className="sale-icon"><FaReceipt size={16} /></span>
+                    <div className="sale-meta">
+                      <strong>{s.id}</strong>
+                      <span>{s.cliente}</span>
+                    </div>
+                  </div>
+                  <div className="sale-right">
+                    <span className="sale-amount">
+                      ${s.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="sale-date">{s.fecha}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card stats-card">
+            <div className="card-header">
+              <FaChartBar size={18} />
+              <h4>Estadísticas de la semana</h4>
+            </div>
+            <div className="bars">
+              {chartData.map(d => (
+                <div key={d.label} className="bar">
+                  <div
+                    className="bar-fill"
+                    style={{ height: `${(d.value / maxValue) * 100}%` }}
+                    aria-label={`${d.label}: ${d.value}`}
+                  />
+                  <span className="bar-label">{d.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
       </main>
     </div>
   );
