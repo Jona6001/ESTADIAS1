@@ -51,6 +51,7 @@ const Producto = sequelize.define(
         key: "ID",
       },
     },
+    // status eliminado
   },
   {
     tableName: "Productos",

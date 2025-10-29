@@ -30,16 +30,17 @@ const VentasProductos = sequelize.define(
       ),
       allowNull: false,
     },
-    base: { type: DataTypes.FLOAT, allowNull: false }, // base de la figura principal
-    altura: { type: DataTypes.FLOAT, allowNull: false }, // altura de la figura principal
-    radio: { type: DataTypes.FLOAT, allowNull: false }, // para circulos/ovalos
-    soclo_base: { type: DataTypes.FLOAT, allowNull: false }, // base del soclo
-    soclo_altura: { type: DataTypes.FLOAT, allowNull: false }, // altura del soclo
-    solapa_base: { type: DataTypes.FLOAT, allowNull: false }, // base de la solapa
-    solapa_altura: { type: DataTypes.FLOAT, allowNull: false }, // altura de la solapa
-    caida_base: { type: DataTypes.FLOAT, allowNull: false }, // base de la caída
-    caida_altura: { type: DataTypes.FLOAT, allowNull: false }, // altura de la caída
-    total_m2: { type: DataTypes.FLOAT, allowNull: false }, // total calculado: (base*altura) + (soclo_base*soclo_altura) + (solapa_base*solapa_altura) + (caida_base*caida_altura)
+    base: { type: DataTypes.FLOAT, allowNull: true }, // base de la figura principal
+    altura: { type: DataTypes.FLOAT, allowNull: true }, // altura de la figura principal
+    radio: { type: DataTypes.FLOAT, allowNull: true }, // para circulos/ovalos
+    // Para figuras tipo L: se divide en dos rectángulos
+    base2: { type: DataTypes.FLOAT, allowNull: true }, // base del segundo rectángulo (para L)
+    altura2: { type: DataTypes.FLOAT, allowNull: true }, // altura del segundo rectángulo (para L)
+    soclo_base: { type: DataTypes.FLOAT, allowNull: true }, // base del soclo
+    soclo_altura: { type: DataTypes.FLOAT, allowNull: true }, // altura del soclo
+    cubierta_base: { type: DataTypes.FLOAT, allowNull: true }, // base de la caída
+    cubierta_altura: { type: DataTypes.FLOAT, allowNull: true }, // altura de la caída
+    total_m2: { type: DataTypes.FLOAT, allowNull: true }, // total calculado: (base*altura) + (soclo_base*soclo_altura) + (solapa_base*solapa_altura) + (caida_base*caida_altura)
     descripcion: { type: DataTypes.STRING, allowNull: true },
   },
   {

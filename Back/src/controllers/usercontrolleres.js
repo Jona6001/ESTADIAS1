@@ -1,3 +1,30 @@
+// Obtener todos los usuarios (autenticado)
+async function listarUsuarios(req, res) {
+  try {
+    const usuarios = await Usuario.findAll();
+    res.json({ usuarios });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ mensaje: "Error al listar usuarios", error: error.message });
+  }
+}
+
+// Obtener usuario por ID (autenticado)
+async function buscarUsuario(req, res) {
+  try {
+    const { id } = req.params;
+    const usuario = await Usuario.findByPk(id);
+    if (!usuario) {
+      return res.status(404).json({ mensaje: "Usuario no encontrado" });
+    }
+    res.json({ usuario });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ mensaje: "Error al buscar usuario", error: error.message });
+  }
+}
 // Controlador para reactivar usuario (solo admin)
 async function reactivarUsuario(req, res) {
   try {
@@ -219,4 +246,6 @@ module.exports = {
   modificarUsuario,
   eliminarUsuario,
   reactivarUsuario,
+  listarUsuarios,
+  buscarUsuario,
 };

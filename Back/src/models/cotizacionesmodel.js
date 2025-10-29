@@ -33,6 +33,18 @@ const Cotizacion = sequelize.define(
       allowNull: false,
       defaultValue: DataTypes.NOW,
     },
+    total: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0.0,
+      comment: "Total calculado en base a los m2 de los productos",
+    },
+    anticipo: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0.0,
+      comment: "Anticipo o saldo pagado por el cliente",
+    },
     status: {
       type: DataTypes.ENUM("pendiente", "pagado", "cancelado"),
       allowNull: false,

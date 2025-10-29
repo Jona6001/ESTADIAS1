@@ -9,7 +9,7 @@ const authConfig = {
 // Función para generar un token
 function generarToken(usuario) {
   const payload = {
-    id: usuario.id,
+    ID: usuario.ID,
     rol: usuario.rol, // Asegúrate de que el modelo Usuario tenga un campo "rol"
   };
 

@@ -1,6 +1,6 @@
 // Servicio para login
 export async function loginUser(email, password) {
-  const res = await fetch("http://localhost:3000/api/login", {
+  const res = await fetch("http://localhost:3000/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

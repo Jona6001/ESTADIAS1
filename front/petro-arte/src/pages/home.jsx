@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../App.css";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FaUser, FaHome, FaBoxes, FaChartBar, FaReceipt } from "react-icons/fa";
 
 const Home = () => {
@@ -11,11 +11,17 @@ const Home = () => {
   const [timeStr, setTimeStr] = useState("");
   const menuRef = useRef();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/");
+      return;
+    }
     const user = JSON.parse(localStorage.getItem("user"));
     if (user && user.nombre) setUserName(user.nombre);
-  }, []);
+  }, [navigate]);
 
   // Fecha y hora
   useEffect(() => {
@@ -41,14 +47,25 @@ const Home = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const handleLogout = () => {
     setMenuOpen(false);
+    setShowLogoutConfirm(true);
+  };
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     navigate("/");
+  };
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false);
   };
 
   const handleConfig = () => {
     setMenuOpen(false);
-    alert("Configuración próximamente");
+    navigate("/config");
   };
 
   // Datos simulados para la UI
@@ -91,17 +108,21 @@ const Home = () => {
               <h1>INICIO <FaHome className="iconName" /></h1>
             </header>
             <div className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}>
-              <button className="nav-btn" onClick={() => navigate("/ventas")}>Ventas</button>
-              <button className="nav-btn" onClick={() => navigate("/clientes")}>Clientes</button>
-              <button className="nav-btn" onClick={() => navigate("/usuarios")}>Usuarios</button>
+              <button className={`nav-btn${location.pathname === "/home" ? " nav-btn-active" : ""}`} onClick={() => navigate("/home")}>Inicio</button>
+              <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
+              <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
+              <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
+              <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
             </div>
           </div>
 
           {/* Centro: navegación (oculto en móvil) */}
           <div className="nav-center">
-            <button className="nav-btn" onClick={() => navigate("/ventas")}>Ventas</button>
-            <button className="nav-btn" onClick={() => navigate("/clientes")}>Clientes</button>
-            <button className="nav-btn" onClick={() => navigate("/usuarios")}>Usuarios</button>
+            <button className={`nav-btn${location.pathname === "/home" ? " nav-btn-active" : ""}`} onClick={() => navigate("/home")}>Inicio</button>
+            <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
+            <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
+            <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
+            <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
           </div>
 
           {/* Derecha: fecha/hora + usuario */}
@@ -123,6 +144,18 @@ const Home = () => {
               <div className="user-menu">
                 <button onClick={handleConfig}>Configuración</button>
                 <button onClick={handleLogout}>Cerrar sesión</button>
+              </div>
+            )}
+            {showLogoutConfirm && (
+              <div className="modal-overlay" style={{ zIndex: 2000 }}>
+                <div className="modal-content" style={{ maxWidth: 340, padding: '2rem 1.5rem', textAlign: 'center' }}>
+                  <h2 style={{ color: '#a30015', fontWeight: 800, fontSize: '1.15rem', marginBottom: 18 }}>¿Cerrar sesión?</h2>
+                  <p style={{ color: '#7b1531', marginBottom: 22, fontWeight: 600 }}>¿Estás seguro de que deseas cerrar sesión?</p>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                    <button className="delete-btn" style={{ minWidth: 90 }} onClick={confirmLogout}>Cerrar sesión</button>
+                    <button className="cancel-btn" style={{ minWidth: 90 }} onClick={cancelLogout}>Cancelar</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

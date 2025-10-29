@@ -12,7 +12,13 @@ app.use(express.json());
 
 // Rutas
 const authRoutes = require("./src/routes/authRoutes");
-app.use("/api", authRoutes);
+const clientRoutes = require("./src/routes/clientesRoutes");
+const productRoutes = require("./src/routes/productRoutes");
+const ventasRoutes = require("./src/routes/ventasRoutes");
+app.use(authRoutes);
+app.use(clientRoutes);
+app.use(productRoutes);
+app.use(ventasRoutes);
 // ...existing code...
 
 // ...existing code...
