@@ -12,6 +12,7 @@ const Users = () => {
   const [users, setUsers] = useState([]);
   const [filter, setFilter] = useState("");
   const [filterField, setFilterField] = useState("nombre");
+  const [userOrder, setUserOrder] = useState("recientes"); // ordenar por fecha
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 8;
   const [editingUser, setEditingUser] = useState(null);
@@ -21,7 +22,11 @@ const Users = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [confirmModal, setConfirmModal] = useState({ open: false, userId: null });
+  // Confirm modals for activate/deactivate (unified style like Clientes/Ventas)
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [showReactivateConfirm, setShowReactivateConfirm] = useState(false);
+  const [reactivateTarget, setReactivateTarget] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -176,10 +181,13 @@ const Users = () => {
         throw new Error(error.mensaje || "Error al desactivar usuario");
       }
       fetchUsers();
-      setConfirmModal({ open: false, userId: null, type: null });
+      // Cerrar modal de confirmación unificado
+      setShowDeactivateConfirm(false);
+      setDeactivateTarget(null);
     } catch (err) {
       setErrorMsg(err.message);
-      setConfirmModal({ open: false, userId: null, type: null });
+      setShowDeactivateConfirm(false);
+      setDeactivateTarget(null);
     }
   };
 
@@ -201,11 +209,24 @@ const Users = () => {
         throw new Error(error.mensaje || "Error al activar usuario");
       }
       fetchUsers();
-      setConfirmModal({ open: false, userId: null, type: null });
+      // Cerrar modal de confirmación unificado
+      setShowReactivateConfirm(false);
+      setReactivateTarget(null);
     } catch (err) {
       setErrorMsg(err.message);
-      setConfirmModal({ open: false, userId: null, type: null });
+      setShowReactivateConfirm(false);
+      setReactivateTarget(null);
     }
+  };
+
+  // Abrir confirm dialogs (unificados)
+  const askDeactivate = (user) => {
+    setDeactivateTarget(user);
+    setShowDeactivateConfirm(true);
+  };
+  const askReactivate = (user) => {
+    setReactivateTarget(user);
+    setShowReactivateConfirm(true);
   };
 
   // Filtrado avanzado por campo
@@ -219,9 +240,17 @@ const Users = () => {
     return val.includes(filter.toLowerCase());
   });
 
+  // Ordenar por fecha de creación (más recientes/antiguos)
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const da = new Date(a?.fecha_creacion || a?.createdAt || a?.fecha || 0).getTime();
+    const db = new Date(b?.fecha_creacion || b?.createdAt || b?.fecha || 0).getTime();
+    if (userOrder === "antiguos") return da - db; // más antiguos primero
+    return db - da; // por defecto más recientes primero
+  });
+
   // Paginación
-  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
-  const paginatedUsers = filteredUsers.slice(
+  const totalPages = Math.ceil(sortedUsers.length / usersPerPage);
+  const paginatedUsers = sortedUsers.slice(
     (currentPage - 1) * usersPerPage,
     currentPage * usersPerPage
   );
@@ -303,9 +332,11 @@ const Users = () => {
 
       <main className="users-container">
         {/* Botón para abrir el modal */}
-        <button className="open-add-modal-btn" onClick={() => setShowAddModal(true)}>
-          <FaPlus /> Nuevo usuario
-        </button>
+        <div className="top-actions">
+          <button className="open-add-modal-btn" onClick={() => setShowAddModal(true)}>
+            <FaPlus /> Nuevo usuario
+          </button>
+        </div>
         {/* Modal para agregar usuario */}
         {showAddModal && (
           <div className="modal-overlay">
@@ -424,10 +455,20 @@ const Users = () => {
           setCurrentPage(1);
         }}
       >
+      {/* Ordenar por fecha */}
+      <select
+        className="users-table-filter-select"
+        value={userOrder}
+        onChange={e => { setUserOrder(e.target.value); setCurrentPage(1); }}
+        title="Ordenar por fecha"
+      >
+        <option value="recientes">Más recientes</option>
+        <option value="antiguos">Más antiguos</option>
+      </select>
         <option value="nombre">Nombre</option>
         <option value="correo">Correo</option>
   <option value="rol">Rol</option>
-  <option value="telefono">Teléfono</option>
+        onClick={() => { setFilter(""); setCurrentPage(1); }}
   <option value="status">Estado</option>
       </select>
       {filterField === "rol" ? (
@@ -510,73 +551,98 @@ const Users = () => {
                   </td>
                   <td>{user.fecha_creacion ? new Date(user.fecha_creacion).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}</td>
                   <td>
-                    {/* Solo permite editar si NO es el usuario actual */}
-                    {user.ID !== currentUser?.ID && (
-                      <button className="edit-btn" onClick={() => handleEdit(user)}><FaEdit /></button>
-                    )}
-                    {/* Solo permite desactivar/reactivar si NO es el usuario actual */}
-                    {user.ID !== currentUser?.ID && (
-                      user.status === false ? (
-                        <button 
-                          className="action-btn reactivate-btn" 
-                          onClick={() => setConfirmModal({ open: true, userId: user.ID, type: 'activar' })}
-                          title="Reactivar usuario"
-                        >
-                          <FaCheckCircle />
-                        </button>
-                      ) : (
-                        <button 
-                          className="action-btn delete-btn" 
-                          onClick={() => setConfirmModal({ open: true, userId: user.ID, type: 'desactivar' })}
-                          title="Desactivar usuario"
-                        >
-                          <FaTrashAlt />
-                        </button>
-                      )
-                    )}
-                    
-      {/* Modal de confirmación para activar usuario */}
-      {confirmModal.open && confirmModal.type === 'activar' && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{maxWidth: 350, textAlign: 'center'}}>
-            <FaCheckCircle size={48} color="#2ecc40" style={{marginBottom: 12}}/>
-            <h2 style={{marginBottom: 10, color: '#222'}}>Confirmar activación</h2>
-            <p style={{marginBottom: 18}}>¿Estás seguro que deseas <b>activar</b> este usuario?</p>
-            <div style={{display: 'flex', gap: 10}}>
-              <button className="add-btn" style={{flex: 1}} onClick={() => handleReactivate(confirmModal.userId)}>
-                <FaCheckCircle style={{marginRight: 6}}/> Activar
-              </button>
-              <button className="cancel-btn" style={{flex: 1}} onClick={() => setConfirmModal({ open: false, userId: null, type: null })}>
-                <FaTimesCircle style={{marginRight: 6}}/> Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Modal de confirmación para desactivar usuario */}
-      {confirmModal.open && confirmModal.type === 'desactivar' && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{maxWidth: 350, textAlign: 'center'}}>
-            <FaTrashAlt size={48} color="#a30015" style={{marginBottom: 12}}/>
-            <h2 style={{marginBottom: 10, color: '#222'}}>Confirmar desactivación</h2>
-            <p style={{marginBottom: 18}}>¿Estás seguro que deseas <b>desactivar</b> este usuario?</p>
-            <div style={{display: 'flex', gap: 10}}>
-              <button className="delete-btn" style={{flex: 1}} onClick={() => handleDeactivate(confirmModal.userId)}>
-                <FaTrashAlt style={{marginRight: 6}}/> Desactivar
-              </button>
-              <button className="cancel-btn" style={{flex: 1}} onClick={() => setConfirmModal({ open: false, userId: null, type: null })}>
-                <FaTimesCircle style={{marginRight: 6}}/> Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                    <div className="table-actions">
+                      {/* Solo permite editar si NO es el usuario actual */}
+                      {user.ID !== currentUser?.ID && (
+                        <button className="edit-btn" onClick={() => handleEdit(user)} title="Editar usuario"><FaEdit /></button>
+                      )}
+                      {/* Solo permite desactivar/reactivar si NO es el usuario actual */}
+                      {user.ID !== currentUser?.ID && (
+                        user.status === false ? (
+                          <button
+                            className="add-btn"
+                            onClick={() => askReactivate(user)}
+                            title="Reactivar usuario"
+                          >
+                            <FaCheckCircle />
+                          </button>
+                        ) : (
+                          <button
+                            className="delete-btn"
+                            onClick={() => askDeactivate(user)}
+                            title="Desactivar usuario"
+                          >
+                            <FaTrashAlt />
+                          </button>
+                        )
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+
+        {/* Confirmación desactivar (estilo unificado) */}
+        {showDeactivateConfirm && (
+          <div className="modal-overlay">
+            <div className="modal-content" style={{ width: 380, maxWidth: '90vw', color: '#222', position: 'relative' }}>
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => { setShowDeactivateConfirm(false); setDeactivateTarget(null); }}
+                >
+                </button>
+              </div>
+              <h2 style={{ color: '#111', fontSize: '1.05rem', marginBottom: 10 }}>Confirmar desactivación</h2>
+              <p style={{ marginBottom: 16 }}>
+                ¿Seguro que deseas desactivar al usuario {deactivateTarget?.nombre}? Podrás reactivarlo después.
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                <button className="cancel-btn" onClick={() => { setShowDeactivateConfirm(false); setDeactivateTarget(null); }}>No, volver</button>
+                <button
+                  className="delete-btn"
+                  onClick={async () => { await handleDeactivate(deactivateTarget?.ID ?? deactivateTarget?.id); }}
+                >
+                  Sí, desactivar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmación reactivar (estilo unificado) */}
+        {showReactivateConfirm && (
+          <div className="modal-overlay">
+            <div className="modal-content" style={{ width: 380, maxWidth: '90vw', color: '#222', position: 'relative' }}>
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => { setShowReactivateConfirm(false); setReactivateTarget(null); }}
+                >
+                </button>
+              </div>
+              <h2 style={{ color: '#111', fontSize: '1.05rem', marginBottom: 10 }}>Confirmar reactivación</h2>
+              <p style={{ marginBottom: 16 }}>
+                ¿Deseas reactivar al usuario {reactivateTarget?.nombre}?
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                <button className="cancel-btn" onClick={() => { setShowReactivateConfirm(false); setReactivateTarget(null); }}>No, volver</button>
+                <button
+                  className="add-btn"
+                  onClick={async () => { await handleReactivate(reactivateTarget?.ID ?? reactivateTarget?.id); }}
+                >
+                  Sí, reactivar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Paginación */}
         {totalPages > 1 && (

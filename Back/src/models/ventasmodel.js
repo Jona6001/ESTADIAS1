@@ -19,6 +19,8 @@ const VentasProductos = sequelize.define(
       allowNull: false,
       references: { model: "Productos", key: "ID" },
     },
+    // Cantidad de piezas solicitadas para este corte
+    cantidad: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
     tipoFigura: {
       type: DataTypes.ENUM(
         "circulo",

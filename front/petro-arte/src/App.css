@@ -49,6 +49,73 @@
   background: #ccc;
 }
 
+/* === MODAL COMPACTO (ADD/EDIT) Y GRID DE PRODUCTOS === */
+.modal-content.compact {
+  width: 90vw;
+  max-width: 1200px;
+  max-height: 80vh;
+  padding: 14px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.modal-content.compact .user-form label {
+  margin-bottom: 4px;
+  font-size: 0.94rem;
+}
+.modal-content.compact .user-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+}
+.modal-content.compact .product-field .user-input,
+.modal-content.compact .product-field select,
+.modal-content.compact .product-field textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.modal-content.compact .products-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.modal-content.compact .product-card {
+  border: 1px solid #e7e7e7;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+.modal-content.compact .product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.modal-content.compact .product-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.modal-content.compact .product-field--full {
+  grid-column: 1 / -1;
+}
+@media (max-width: 980px) {
+  .modal-content.compact .products-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .modal-content.compact {
+    width: 95vw;
+    max-height: 82vh;
+  }
+  .modal-content.compact .product-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* PANTALLA DE INVENTARIO */
 
 .inventory-table {
@@ -1217,6 +1284,60 @@ input:-webkit-autofill:active {
 .add-btn:hover { filter: brightness(1.05); }
 .cancel-btn:hover { filter: brightness(1.05); }
 
+/* Acciones dentro de celdas de tabla: separación y wrap */
+.table-actions {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .table-actions { gap: 8px; }
+}
+
+/* Contenedor superior para centrar botón de alta en todas las pantallas */
+.top-actions {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0 18px;
+}
+
+/* === Status badges unificados (Clientes, Usuarios, Ventas) === */
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+/* Verde: activo, pagado, vendido */
+.status-activo,
+.status-pagado,
+.status-vendido {
+  background: #e9f8f0;
+  color: #1f7a4d;
+  border-color: rgba(34, 148, 93, 0.25);
+}
+
+/* Rojo: desactivado, cancelado */
+.status-desactivado,
+.status-cancelado {
+  background: #fde8eb;
+  color: #a30015;
+  border-color: rgba(211, 38, 61, 0.25);
+}
+
+/* Amarillo: pendiente */
+.status-pendiente {
+  background: #fff6db;
+  color: #946200;
+  border-color: rgba(244, 189, 0, 0.35);
+}
+
 .login-logo img {
   width: 220px;
   height: auto;
@@ -1338,657 +1459,1303 @@ input:-webkit-autofill:active {
   transition: all 0.2s ease;
 }
 
-.user-input::placeholder {
-  color: #666;
-}
-
-.user-input:focus {
-  outline: none;
-  border-color: #a30015;
+.user/* === MODAL PRODUCTOS === */
+.modal-product {
   background: #fff;
-  box-shadow: 0 0 6px rgba(163, 0, 21, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
+  padding: 2.2rem 2.2rem 1.5rem 2.2rem;
+  max-width: 420px;
+  width: 95vw;
+  margin: 0 auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
-/* === BOTONES DENTRO DEL MODAL === */
-.add-btn,
-.cancel-btn {
-  width: 100%;
-  padding: 0.75rem;
-  font-size: 1rem;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.25s ease-in-out;
+/* === MODAL COMPACTO PARA CREAR/EDITAR COTIZACIÓN === */
+.modal-content.compact {
+  padding: 16px 18px;
 }
-
-.add-btn {
-  background: #5b0018;
-  color: #fff;
-  margin-bottom: 0.6rem;
+.modal-content.compact .user-form label {
+  margin-bottom: 4px;
+  font-size: 0.92rem;
 }
-
-.add-btn:hover {
-  background: #7b1531;
-  transform: scale(1.03);
-}
-
-.cancel-btn {
-  background: #e5e5e5;
-  color: #222;
-}
-
-.cancel-btn:hover {
-  background: #d3d3d3;
-  transform: scale(1.02);
-}
-
-/* === ANIMACIONES === */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(25px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* ---------- TABLA DE USUARIOS ---------- */
-
-.users-table {
-  width: 90%;
-  margin: 7px auto;
-  border-collapse: collapse;
-  background-color: #fff;
-  color: #222;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
-  font-family: "Segoe UI", sans-serif;
-}
-
-
-
-
-/* Encabezado */
-.users-table th {
-  background-color: #7b1531;
-  color: #fff;
-  padding: 14px;
-  font-size: 1rem;
-  text-align: left;
-  letter-spacing: 0.5px;
-}
-
-/* Celdas */
-.users-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid #eee;
+.modal-content.compact .user-input {
+  padding: 8px 10px;
   font-size: 0.95rem;
 }
-
-/* Fila al pasar el cursor */
-.users-table tr:hover {
-  background-color: #f6f6f6;
+.modal-content.compact .products-list {
+  gap: 10px;
 }
-
-/* Columna de Acciones */
-.users-table td:last-child,
-.users-table th:last-child {
-  text-align: center;
-  width: 150px; /* Mantiene tamaño uniforme */
+.modal-content.compact .product-card {
+  padding: 10px 12px;
 }
-
-/* ---------- BOTONES DE ACCIÓN ---------- */
-.edit-btn,
-.delete-btn,
-.save-btn {
-  border: none;
-  cursor: pointer;
-  margin: 0 5px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 15px;
-  transition: all 0.25s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Botón editar */
-.edit-btn {
-  background-color: #f39c12;
-  color: #fff;
-}
-.edit-btn:hover {
-  background-color: #e67e22;
-  transform: translateY(-2px);
-}
-
-/* Botón guardar */
-.save-btn {
-  background-color: #007bff;
-  color: #fff;
-}
-.save-btn:hover {
-  background-color: #0056b3;
-  transform: translateY(-2px);
-}
-
-/* Botón eliminar */
-/* ---------- BOTÓN ELIMINAR ---------- */
-.delete-btn {
-  background-color: #a30015;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 14px;
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  margin-left: 12px; /* 🔹 Más separación del botón anterior */
-  transition: all 0.25s ease;
-  box-shadow: 0 2px 6px rgba(163, 0, 21, 0.2);
-}
-
-.delete-btn:hover {
-  background-color: #7b1531;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(123, 21, 49, 0.3);
-}
-
-/* ---------- BOTÓN REACTIVAR / DESACTIVAR ---------- */
-.reactivate-btn {
-  background-color: #2ecc40;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 14px; /* igual que el delete-btn */
-  font-weight: 600;
-  font-size: 1rem; /* mismo tamaño de fuente */
-  cursor: pointer;
-  margin-left: 12px; /* misma separación */
-  transition: all 0.25s ease;
-  box-shadow: 0 2px 6px rgba(46, 204, 64, 0.2);
-  display: inline-flex; /* centra el icono */
-  align-items: center;
-  justify-content: center;
-  gap: 6px; /* si luego agregas texto o más íconos */
-  width: auto;
-  height: auto;
-}
-
-.reactivate-btn:hover {
-  background-color: #27ae60;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3);
-}
-
-.reactivate-btn svg {
-  font-size: 1rem; /* iguala tamaño del ícono con el texto */
-}
-
-
-/* ---------- INPUTS EN EDICIÓN ---------- */
-.users-table input,
-.users-table select {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  color: #222;
-  background-color: #fafafa;
-  transition: all 0.2s ease;
-}
-
-.users-table input:focus,
-.users-table select:focus {
-  border-color: #7b1531;
-  box-shadow: 0 0 4px rgba(123, 21, 49, 0.25);
-  outline: none;
-  background-color: #fff;
-}
-
-/* ---------- ESTILO PARA CELDA SIN USUARIOS ---------- */
-.users-table td[colspan="5"] {
-  text-align: center;
-  padding: 24px;
-  font-style: italic;
-  color: #666;
-}
-
-/* ---------- RESPONSIVE ---------- */
-@media (max-width: 768px) {
-  .users-table {
-    width: 100%;
-    font-size: 14px;
-  }
-
-  .users-table th,
-  .users-table td {
-    padding: 10px;
-  }
-
-  .users-table td:last-child {
-    display: flex;
-    justify-content: center;
-  }
-
-  .edit-btn,
-  .save-btn,
-  .delete-btn {
-    font-size: 14px;
-    padding: 6px 8px;
-  }
-}
-
-
-
-/* ---------- TÍTULO DEL FILTRO USUARIOS ---------- */
-.users-filter-title {
-  font-weight: 700;
-  color: #7b1531;
-  font-size: 1.05rem;
-  letter-spacing: 0.5px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  user-select: none;
-  white-space: nowrap;
-}
-
-@media (max-width: 900px) {
-  .users-filter-title {
-    align-self: flex-start;
-    margin-bottom: 4px;
-  }
-}
-
-/* ---------- FILA DE FILTRO DE LA TABLA USUARIOS ---------- */
-.users-table-filter-row {
-  width: 90%;
-  margin: 0 auto -4px auto; /* 🔹 Se pega a la tabla (margin negativo para eliminar el espacio) */
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
+.modal-content.compact .product-grid {
   gap: 8px;
-  background: #fafafa;
-  border-radius: 12px 12px 0 0;
-  padding: 10px 14px; /* 🔹 Más alto para dar espacio vertical al texto */
-  box-shadow: 0 1px 3px rgba(123, 21, 49, 0.06);
+}
+.modal-btn-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 1.2rem;
+  width: 100%;
+  margin-top: 1.5rem;
+}
+.modal-btn-row .add-btn,
+.modal-btn-row .cancel-btn {
+  min-width: 110px;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.modal-btn-row .add-btn {
+  background: #a30015;
+  color: #fff;
+  font-weight: 600;
+}
+.modal-btn-row .add-btn:hover {
+  background: #d32f2f;
+}
+.modal-btn-row .cancel-btn {
+  background: #eee;
+  color: #333;
+  font-weight: 500;
+}
+.modal-btn-row .cancel-btn:hover {
+  background: #ccc;
+}
+
+/* PANTALLA DE INVENTARIO */
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  margin-bottom: 32px;
+  font-size: 1rem;
+  box-shadow: 0 2px 8px rgba(163,0,21,0.07);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.inventory-table th, .inventory-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+.inventory-table th {
+  background: #a30015;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.01rem;
+  letter-spacing: 0.01em;
+}
+.inventory-table tr:last-child td {
+  border-bottom: none;
+}
+.inventory-table .product-img-thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1.5px solid #a30015;
+  background: #faf7f7;
+}
+.inventory-table .status-active {
+  color: #0a7a2a;
+  font-weight: 600;
+  background: #e6f7ea;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.98em;
+}
+.inventory-table .status-inactive {
+  color: #a30015;
+  font-weight: 600;
+  background: #fbeaec;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.98em;
+}
+.inventory-table .inactive-row {
+  background: #fbeaec;
+  color: #a30015;
+  opacity: 0.85;
+}
+@media (max-width: 900px) {
+  .inventory-table th, .inventory-table td {
+    padding: 8px 4px;
+    font-size: 0.97rem;
+  }
+  .inventory-table .product-img-thumb {
+    width: 36px;
+    height: 36px;
+  }
+}
+@media (max-width: 600px) {
+  .inventory-table th, .inventory-table td {
+    font-size: 0.93rem;
+    padding: 6px 2px;
+  }
+  .inventory-table .product-img-thumb {
+    width: 28px;
+    height: 28px;
+  }
+}
+/* Previene scroll horizontal global y elimina margen por defecto del body */
+
+html, body {
+  overflow-x: hidden;
+  margin: 0;
+  font-size: 15px;
+}
+
+/* Offset para contenido cuando el navbar está fijo */
+
+:root { --navbar-offset: 79px; }
+@media (max-width: 768px) { :root { --navbar-offset: 62px; } }
+main { padding-top: var(--navbar-offset); }
+
+/* Contenedor principal del navbar */
+.navbar {
+  padding: 120px 10px 44px 19px;
+  box-shadow: 0 2px 8px rgba(123, 21, 49, 0.08);
   border: 1.5px solid #e0e0e0;
   border-bottom: none;
   transition: all 0.22s ease;
   position: relative;
   z-index: 2;
-  min-height: 48px; /* 🔹 Asegura que el filtro tenga buena altura */
-  max-width: 900px;
+  min-height: 1201px;
+  max-width: 1100px;
 }
 
-.users-table-filter-row-attached {
-  border-radius: 12px 12px 0 0;
-  border-bottom: none;
+/* ---------- LOGO ---------- */
+.nav-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-size: 0.95rem;
+}
+
+
+.nav-left img {
+  height: 52px;
+  width: auto;
+  margin-left: 0.2rem;
+  object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  .nav-left img {
+    height: 38px; /* se adapta a pantallas pequeñas */
+  }
+}
+
+/* ---------- CONTENEDOR DEL USUARIO ---------- */
+.nav-user {
+  display: flex;
+  flex-direction: column;
+  align-items: right;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  height: 100%;
+  margin-right: 0.8rem;
+  justify-self: end;
+}
+
+/* ---------- BOTÓN DEL USUARIO ---------- */
+
+.user-btn {
+  background: #a30015;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  margin-top: 28px;
+  margin-left: 20px; /* mueve el botón más a la derecha, sobre el nombre */
+  transition: transform 0.28s ease, box-shadow 0.28s ease;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.12);
+   
+}
+
+
+.user-btn:hover {
+  transform: translateY(-0.2px);
+    
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Ajuste para mantener proporciones incluso con zoom */
+.navbar, .nav-logo, .nav-user {
+  flex-shrink: 0; /* evita que se encojan con zoom negativo */
+}
+
+
+
+/* Al hacer hover, el botón y el icono suben */
+.nav-user:hover .user-btn {
+  transform: translateY(-2px) scale(1); /* sutil, sin romper layout */
+  box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+}
+
+
+/* Nombre del usuario */
+
+.user-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 0px;
+  margin-bottom: 21px;
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+  margin-left: 8px;
+  text-align: center;
+}
+
+/* Al hacer hover sobre el contenedor, aparece el nombre */
+.nav-user:hover .user-name {
+  opacity: 1;
+  transform: translateY(0); /* sube suavemente */
+  pointer-events: auto;
+}
+
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-self: start; /* pegado a la izquierda */
+}
+
+/* Logo que funciona como botón móvil */
+.mobile-menu-toggle {
+  cursor: pointer;
+}
+
+/* Solo visible en pantallas pequeñas */
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  gap: 0.3rem;
+  position: absolute;
+  top: 60px; /* justo debajo del navbar */
+  left: 0;
+  background: #7b1531;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0 8px 8px;
+  z-index: 150;
+}
+
+/* Cuando está abierto, se muestra */
+@media (max-width: 768px) {
+  .mobile-menu {
+    display: flex;
+  }
+
+  /* Ocultar los botones normales en móvil */
+  .nav-center {
+    display: none;
+  }
+}
+/* (botones del menú móvil definidos más abajo para evitar duplicados) */
+
+
+
+/* Navbar styles */
+.main-navbar.guinda-navbar {
+  width: 100%;            /* evita overflow horizontal con 100vw */
+  background: #7b1531;
+  position: fixed;        /* fijo arriba en todas las pantallas */
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  height: 80px; /* altura consistente */
+  display: flex;
+  align-items: center;
+}
+
+
+.nav-container {
+  width: 100%;
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.1rem 0.5rem;
+}
+
+
+
+
+.nav-center {
+  display: flex;
+  gap: 0.45rem;
+  position: static;
+  transform: none;
+  justify-self: center;
+}
+
+
+
+
+
+/* Nombre del encabezado */
+.header {
+
+   margin-left: -1rem; 
+  margin-top: 1.5em;
+  margin-bottom: 1em;
+}
+
+.header h1 {
+  color: #ffffff;
+  font-size: 1.2rem;
+  margin: 2px;
+  text-shadow: 8px 8px 9px rgba(0, 0, 0, 0.6); /* sombra sutil */
+}
+
+
+/* 🔻 Ocultar header cuando la pantalla sea más angosta (evita que se sobreponga) */
+@media screen and (max-width: 1100px) {
+  .header {
+    display: none;
+  }
+}
+
+/* 🔻 Mostrar título alternativo (nav-title) solo en pantallas pequeñas */
+.nav-title {
+  margin: 0; /* reseteamos márgenes */
+  margin-left: 1rem; /* 👉 mueve ligeramente hacia la derecha */
+
+  font-size: 1rem;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 3px;
+  display: none; 
+
+}
+
+@media screen and (max-width: 1100px) {
+  .nav-title {
+    display: block;
+    text-align: center;
+  }
+}
+
+/* Iconos que acompañan los títulos principales */
+.iconName {
+  font-size: 2.5rem;           /* Tamaño del icono */
+  color: #ffffff;            /* Color blanco */
+  margin-left: 10px;         /* Espacio entre texto e icono */
+  vertical-align: middle;    /* Mantiene alineación con el texto */
+  position: relative;        /* Permite ajustar la posición */
+  top: -5px;                 /* Lo mueve ligeramente hacia arriba */
+  box-shadow: 0px 2px 0px rgba(0, 0, 0, 0.6); /* sombra sutil */
+}
+
+
+
+
+/* === NAVBAR BUTTONS MEJORADOS === */
+
+/* === NAVBAR BUTTONS CON BORDES Y ACTIVO DESTACADO === */
+
+.nav-btn {
   background: #fff;
-  box-shadow: none;
-  margin-bottom: -6px; /* 🔹 Ajuste adicional para pegarlo mejor */
+  border: 1.5px solid #000000;
+  color: #000000;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 5px 13px;
+  border-radius: 6px;
+  margin: 0 3px;
+  transition: background 0.18s, color 0.18s, border 0.18s, box-shadow 0.18s;
+  outline: none;
+  position: relative;
+  letter-spacing: 0.3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  z-index: 1;
+}
+.nav-btn:hover {
+  background: #bdbdbd;
+  color: #111;
+  border: 1.8px solid #000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+.nav-btn.nav-btn-active {
+  background: #eaff00;
+  color: #111;
+  font-weight: 900;
+  border: 2.5px solid #000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.13);
+  z-index: 2;
+}
+
+@media (max-width: 900px) {
+  .nav-btn {
+    font-size: 1.05rem;
+    padding: 10px 18px;
+    margin: 0 2px;
+  }
+}
+
+.user-btn:hover {
+  border: 2px solid #fff;   
+  background: #7b1531;
+  transform: scale(0); /* tamaño sutil para evitar scroll */
+}
+
+
+/* En pantallas pequeñas, mantenemos el nombre visible pero compacto */
+@media screen and (max-width: 768px) {
+  .user-name {
+    display: block;
+    font-size: 0.85rem;
+    max-width: 90px;     /* más estrecho en móvil */
+  }
+}
+
+
+
+/* Menú de usuario */
+.user-menu {
+  position: absolute;
+  top: 103px;
+  right: -30px;
+  transform: translateX(-18px);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 5px 10px 17px rgba(182, 19, 19, 0.737);
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.3rem;
+  z-index: 100;
+  border: 1px solid #000000; /* borde negro para resaltar */
+  animation: slideDown 0.25s ease-out;
+}
+
+.user-menu button {
+  background: none;
+  border: none;
+  color: #7b1531;
+  font-size: 0.97rem;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-left 0.2s, box-shadow 0.2s;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+
+.user-menu button:hover {
+  background: #fde8eb;
+  color: #a30015;
+  border-left: 4px solid #a30015;
+  border-right: 4px solid #a30015;
+  box-shadow: inset 2px 0 5px rgba(0,0,0,0.1);
+}
+
+/* Animación de aparición hacia abajo (mantiene posición X) */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-18px) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-18px) translateY(0);
+  }
+}
+
+
+/* Fecha y hora dentro del navbar */
+
+
+/* === FECHA Y HORA MÁS PEQUEÑA Y COMPACTA === */
+.nav-datetime {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.93rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: rgba(163,0,21,0.92);
+  border-radius: 6px;
+  border: 1.2px solid #fff;
+  padding: 8px 18px 8px 12px;
+  min-width: 0;
+  max-width: 340px;
+  text-align: right;
+  line-height: 1.4;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  white-space: nowrap;
+  margin-left: 0.2rem;
+  margin-right: 1.2rem;
+  box-sizing: border-box;
+}
+.nav-datetime span:first-child {
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.89rem;
+  margin-right: 4px;
+  letter-spacing: 0.1px;
+}
+.nav-datetime span:last-child {
+  color: #ffe0e6;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.05px;
+}
+
+
+
+/* Ajuste responsive */
+@media screen and (max-width: 1250px) {
+  .nav-datetime {
+    display: none;
+  }
+}
+
+
+/* Móvil: ocultar menú central solo */
+@media (max-width: 768px) {
+  .nav-center {        /* botones del centro */
+    display: none;
+  }
+
+  /* Logo como botón desplegable */
+  .mobile-menu-toggle {
+    cursor: pointer;
+  }
+
+/* Menú móvil con animación de despliegue */
+.mobile-menu {
+  position: absolute;
+  top: 73.4px;
+  left: 30px;
+  width: 100px;
+  background: #7b1531;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+  z-index: 150;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  /* Estado cerrado */
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-8px) scaleY(0.98);
+  transform-origin: top;
+  padding: 0 0;
+  transition:
+    max-height 340ms cubic-bezier(.2,.8,.2,1),
+    opacity 220ms ease,
+    transform 280ms cubic-bezier(.2,.8,.2,1),
+    padding 260ms ease;
+}
+
+/* Estado abierto (animado) */
+.mobile-menu.open {
+  max-height: 260px;
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  padding: 0.4rem 0rem;
+}
+
+/* Botones del menú móvil (única definición) */
+.mobile-menu .nav-btn {
+  color: #fff;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.18s ease, transform 0.12s;
+  width: 100%;
+}
+
+.mobile-menu .nav-btn:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+/* Ocultar menú móvil en pantallas grandes */
+@media (min-width: 769px) {
+  .mobile-menu {
+    display: none !important;
+  }
+}
+
+/* Solo oculta el centro en pantallas pequeñas */
+@media (max-width: 768px) {
+  .nav-center {
+    display: none;
+  }
+}
+
+}
+
+
+
+/* CONFIG PAGE */
+/* ---------- CONTENEDOR GENERAL ---------- */
+.config-container {
+  min-height: calc(100vh - var(--navbar-offset));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(120deg, #000000 65%, #fbe9ee 100%);
+  padding-top: var(--navbar-offset);
   padding-bottom: 0;
 }
 
-/* ---------- SELECT DE FILTRO ---------- */
-.users-table-filter-select {
-  padding: 0.45rem 0.8rem; /* 🔹 Más alto para alinear con el input */
-  border-radius: 8px;
-  border: 1.4px solid #a30015;
+/* ---------- FORM WRAPPER ---------- */
+.config-form-wrapper {
   background: #fff;
-  color: #7b1531;
-  font-weight: 600;
-  font-size: 0.93rem;
-  outline: none;
-  transition: all 0.22s ease;
-  min-width: 100px;
-  max-width: 140px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-}
-
-.users-table-filter-select:hover,
-.users-table-filter-select:focus {
-  border-color: #7b1531;
-  box-shadow: 0 2px 8px rgba(123, 21, 49, 0.15);
-}
-
-/* ---------- INPUT DE BÚSQUEDA USUARIO ---------- */
-.users-table-filter-input {
-  flex: 1;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(163, 0, 21, 0.10);
+  padding: 2.2rem 2.5rem;
+  max-width: 600px;
   width: 100%;
-  max-width: 100%;
-  min-width: 70px;
-  padding: 0.45rem 0.8rem;
-  border-radius: 8px;
-  border: 1.4px solid #a30015;
-  background: #fff;
-  color: #222;
-  font-size: 0.93rem;
-  outline: none;
-  transition: all 0.22s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  box-sizing: border-box; /* evita que el padding aumente el ancho total */
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
-.users-table-filter-input::placeholder {
-  color: #999;
+.config-form-wrapper:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(163, 0, 21, 0.12);
 }
 
-.users-table-filter-input:hover,
-.users-table-filter-input:focus {
-  border-color: #7b1531;
-  box-shadow: 0 2px 8px rgba(123, 21, 49, 0.15);
+/* ---------- TÍTULO ---------- */
+.config-form-wrapper h2 {
+  text-align: center;
+  color: #a30015;
+  font-size: 1.35rem;
+  margin-bottom: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  border-bottom: 2px solid #f3d8de;
+  padding-bottom: 0.5rem;
 }
 
-/* ---------- RESPONSIVIDAD ---------- */
-@media (max-width: 768px) {
-  .users-table-filter-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem; /* espacio entre los filtros */
-  }
-
-  .users-table-filter-input {
-    width: 100%;
-    max-width: 100%;
-    font-size: 0.9rem;
-  }
-
-  .users-table-filter-select {
-    width: 100%;
-    max-width: 100%;
-  }
-}
-
-@media (max-width: 480px) {
-  .users-table-filter-input {
-    font-size: 0.85rem;
-    padding: 0.4rem 0.7rem;
-  }
+/* ---------- FORMULARIO ---------- */
+.config-form {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  justify-content: start; /* Mueve todo el grid hacia la izquierda */
+  align-items: center;
+  gap: 0.7rem 1.5rem;
 }
 
 
-/* ---------- SELECTS DENTRO DEL FILTRO ---------- */
-.users-table-filter-row select.users-table-filter-input {
-  min-width: 100px;
-  max-width: 140px;
+/* ---------- LABELS ---------- */
+.config-form label {
   font-weight: 600;
   color: #7b1531;
+  margin-bottom: 0.15rem;
+  font-size: 0.97rem;
+  grid-column: 1 / 2;
+  text-align: right; /* Label alineado hacia el input */
+  justify-self: end;
+  margin-right: 0.5rem; /* Espaciado corto entre label e input */
 }
 
-/* ---------- RESPONSIVE ---------- */
-@media (max-width: 900px) {
-  .users-table-filter-row,
-  .users-table-filter-row-attached {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 8px 8px;
-    max-width: 98vw;
-    margin-bottom: 0; /* 🔹 Evita que quede espacio debajo */
-  }
+/* ---------- INPUTS ---------- */
+.config-form .user-input {
+  background: #f9f9f9;
+  border: 1.4px solid #ccc;
+  border-radius: 8px;
+  padding: 0.55rem 2rem;
+  font-size: 0.97rem;
+  color: #111;
+  transition: all 0.25s ease;
 
-  .users-table-filter-select,
-  .users-table-filter-input {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-  }
+  grid-column: 2 / 3;
+  justify-self: start; /* Empuja el input hacia la izquierda */
+  width: 80%; /* Mantiene el largo completo */
+  max-width: 450px; /* Ajusta si quieres limitar el ancho */
 }
 
-/* ---------- DETALLE EXTRA: ANIMACIÓN AL PASAR EL RATÓN ---------- */
-.users-table-filter-row:hover {
-  box-shadow: 12px 4px 10px rgba(220, 11, 67, 0.735);
+
+
+.config-form .user-input:focus {
+  outline: none;
+  border-color: #a30015;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(163, 0, 21, 0.15);
+}
+
+/* ---------- BOTONES ---------- */
+.config-form .save-btn {
+  background: linear-gradient(90deg, #a30015 60%, #c41e3a 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  padding: 0.7rem 0;
+  margin-top: 0.7rem;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.18s, box-shadow 0.18s;
+  box-shadow: 0 2px 6px rgba(163, 0, 21, 0.08);
+  grid-column: 1 / 3;
+}
+
+.config-form .save-btn:hover {
+  background: linear-gradient(90deg, #7b1531 60%, #a30015 100%);
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 3px 8px rgba(163, 0, 21, 0.15);
+}
+
+.config-form .show-password-btn {
+  background: #fbe9ee;
+  color: #a30015;
+  border: 1.4px solid #a30015;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.97rem;
+  padding: 0.55rem 0;
+  margin-bottom: 0.3rem;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, transform 0.18s;
+  grid-column: 1 / 3;
+}
+
+.config-form .show-password-btn:hover {
+  background: #fff0f4;
+  color: #7b1531;
   transform: translateY(-1px);
 }
 
-
-/* Pantalla de ventas*/
-
-.ventas-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem 5rem;
+/* ---------- MENSAJES ---------- */
+.config-form .success-msg,
+.config-form .error-msg {
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+  text-align: center;
+  font-size: 0.95rem;
+  grid-column: 1 / 3;
 }
 
-.ventas-section {
+.config-form .success-msg {
+  background: #eafaf1;
+  color: #1a7f37;
+  border: 1.3px solid #1a7f37;
+}
+
+.config-form .error-msg {
+  background: #fde8eb;
+  color: #a30015;
+  border: 1.3px solid #a30015;
+}
+
+/* ---------- RESPONSIVO ---------- */
+@media (max-width: 900px) {
+  .config-form-wrapper {
+    max-width: 96vw;
+    padding: 1.3rem 1rem;
+  }
+  .config-form {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+  }
+  .config-form label,
+  .config-form .user-input,
+  .config-form .save-btn,
+  .config-form .show-password-btn,
+  .config-form .success-msg,
+  .config-form .error-msg {
+    grid-column: 1 / 2 !important;
+    justify-self: stretch;
+    text-align: left;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .config-container {
+    align-items: flex-start;
+    padding-top: 1.2rem;
+    padding-bottom: 1rem;
+  }
+  .config-form-wrapper {
+    padding: 0.9rem 0.7rem;
+    max-width: 98vw;
+    margin: 0.8rem 0;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(123, 21, 49, 0.12);
+  }
+  .config-form-wrapper h2 {
+    font-size: 1.1rem;
+    margin-bottom: 0.8rem;
+  }
+}
+
+
+
+
+
+/* ---- HOME DASHBOARD ---- */
+.home-dashboard {
+  display: grid;
+  grid-template-columns: 1fr 320px; /* columna derecha más angosta */
+  gap: 1rem;
+  padding: 0.8rem 1rem 1.2rem; /* compacta el relleno general */
+  margin-top: calc(var(--navbar-offset) - 30px); /* separación clara del navbar */
+}
+
+@media (max-width: 1100px) {
+  .home-dashboard {
+    grid-template-columns: 1fr;   /* apila columnas */
+    row-gap: 0.9rem;
+    margin-top: calc(var(--navbar-offset) - 40px); /* consistente con altura del navbar */
+  }
+}
+
+/* Columna izquierda: tarjetas de acción */
+.home-left {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem;
+}
+
+/* Tarjetas acción */
+.home-card {
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  padding: 0.65rem 0.75rem; /* más compacto */
+}
+
+.home-card-action {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.2s ease, background 0.2s ease;
+  text-align: left;
+}
+
+.home-card-action:hover {
+  transform: translateY(-1px); /* menor elevación */
+  box-shadow: 0 6px 22px rgba(0,0,0,0.12);
+}
+
+/* Variante Inventario (guinda) */
+.inventory-card {
+  background: #7b1531;
+  color: #fff;
+  border: 1.5px solid #fff;
+  padding: 0.55rem 0.8rem; /* más pequeño */
+  margin-top: 2.2rem; /* más separación desde arriba */
+}
+.inventory-card:hover { background: #a30015; }
+
+.home-card-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;   /* icono más pequeño */
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+}
+
+.home-card-text h3 {
+  margin: 0;
+  font-size: 0.9rem; /* título más compacto */
+  color: inherit;
+}
+.home-card-text p {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;  /* descripción más compacta */
+  opacity: 0.92;
+}
+
+/* Columna derecha */
+.home-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.2rem; /* más separación bajo el navbar */
+}
+
+/* Tarjetas genéricas del panel derecho */
+.card {
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 2px 16px rgba(123,21,49,0.08);
-  margin-bottom: 2.5rem;
-  padding: 2rem 1.5rem 1.5rem 1.5rem;
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  padding: 0.65rem 0.75rem; /* compacta tarjetas derechas */
 }
 
-.ventas-section h2 {
-  color: #a30015;
-  margin-bottom: 1.2rem;
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-.ventas-table, .cotizaciones-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 1.5rem;
-  background: #faf7f7;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 8px rgba(123,21,49,0.06);
-}
-
-.ventas-table th, .cotizaciones-table th {
-  background: #a30015;
-  color: #fff;
-  font-weight: 600;
-  padding: 0.85rem 0.6rem;
-  text-align: left;
-  font-size: 1rem;
-}
-.ventas-table td, .cotizaciones-table td {
-  padding: 0.7rem 0.6rem;
-  border-bottom: 1px solid #f0e6e6;
-  font-size: 0.98rem;
-}
-.ventas-table tr:last-child td, .cotizaciones-table tr:last-child td {
-  border-bottom: none;
-}
-
-.ventas-table tbody tr:hover, .cotizaciones-table tbody tr:hover {
-  background: #fbeaec;
-  transition: background 0.2s;
-}
-
-.ventas-btn, .cotizaciones-btn {
-  background: #a30015;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.45rem 1.1rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  margin-right: 0.5rem;
-  transition: background 0.2s;
-}
-.ventas-btn:hover, .cotizaciones-btn:hover {
-  background: #7b1531;
-}
-
-.ventas-form, .cotizaciones-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.2rem 2.5rem;
-  margin-bottom: 1.2rem;
-}
-.ventas-form label, .cotizaciones-form label {
-  font-weight: 500;
-  color: #7b1531;
-  margin-bottom: 0.3rem;
-  display: block;
-}
-.ventas-form input, .ventas-form select, .cotizaciones-form input, .cotizaciones-form select {
-  width: 100%;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid #e0cfd0;
-  border-radius: 5px;
-  font-size: 1rem;
-  background: #fff;
-  margin-bottom: 0.5rem;
-}
-.ventas-form input:focus, .ventas-form select:focus, .cotizaciones-form input:focus, .cotizaciones-form select:focus {
-  outline: 2px solid #a30015;
-  border-color: #a30015;
-}
-
-/* Modal ventas/cotizaciones */
-.ventas-modal-overlay, .cotizaciones-modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.18);
-  z-index: 1000;
+.card-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.5rem;
+  color: #7b1531;
+  margin-bottom: 0.6rem;
 }
-.ventas-modal-content, .cotizaciones-modal-content {
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
-  padding: 2.2rem 2.2rem 1.5rem 2.2rem;
-  max-width: 480px;
-  width: 95vw;
-  position: relative;
+.card-header h4 { margin: 0; font-size: 0.98rem; }
+
+/* Ventas recientes */
+.sales-list { list-style: none; padding: 0; margin: 0; }
+
+.sale-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px dashed rgba(0,0,0,0.08);
+}
+.sale-item:last-child { border-bottom: none; }
+
+.sale-left { display: flex; align-items: center; gap: 0.6rem; }
+
+.sale-icon {
+  color: #7b1531;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(123,21,49,0.1);
+}
+
+.sale-meta strong { display: block; font-size: 0.98rem; color: #111; }
+.sale-meta span { font-size: 0.86rem; color: #555; }
+
+.sale-right {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sale-amount { font-weight: 700; color: #111; }
+.sale-date { font-size: 0.8rem; color: #666; }
+
+/* Estadísticas de barras */
+.stats-card .bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  align-items: end;
+  height: 110px; /* barras más bajas */
+  padding: 0.4rem 0.2rem 0.2rem;
+}
+.stats-card .bar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
 }
-.ventas-modal-close, .cotizaciones-modal-close {
-  position: absolute;
-  top: 12px;
-  right: 18px;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: #a30015;
-  cursor: pointer;
+.stats-card .bar-fill {
+  width: 100%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #a30015 0%, #7b1531 100%);
+  box-shadow: 0 6px 12px rgba(123,21,49,0.25);
+  transition: height 0.3s ease;
+}
+.stats-card .bar-label { font-size: 0.78rem; color: #444; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .home-left { grid-template-columns: 1fr; }
+  .inventory-card { padding: 0.55rem 0.7rem; }
+  .card { padding: 0.6rem 0.7rem; }
 }
 
-@media (max-width: 900px) {
-  .ventas-form, .cotizaciones-form {
+/* === Details grid for cotización modal === */
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.details-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f7f7f9;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  min-height: 38px;
+}
+
+.details-label {
+  font-weight: 700;
+  color: #111;
+  min-width: 110px;
+  white-space: nowrap;
+}
+
+.details-value {
+  color: #222;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .details-grid {
     grid-template-columns: 1fr;
   }
-  .ventas-section, .ventas-container {
-    padding: 1.2rem 0.5rem;
+  .details-label {
+    min-width: 90px;
   }
 }
 
 
-/* === Productos en formularios: tarjetas apiladas y grid responsivo === */
-.products-list {
+
+/* === Filtro/Barra de Búsqueda Unificada (fondo blanco) === */
+.users-table-filter-row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 8px 0 12px;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1.5px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 12px 0 16px 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+/* Variante para pegar la barra a la tabla (sin separados fuertes) */
+.users-table-filter-row.users-table-filter-row-attached {
+  margin-top: 6px;
+  margin-bottom: 12px;
+}
+
+.users-filter-title {
+  color: #7b1531;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+}
+
+.users-table-filter-select,
+.users-table-filter-input {
+  background: #fff;
+  border: 1.4px solid #cfcfcf;
+  border-radius: 8px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 0.98rem;
+  color: #111;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.users-table-filter-input::placeholder {
+  color: #888;
+}
+
+.users-table-filter-select:focus,
+.users-table-filter-input:focus {
+  outline: none;
+  border-color: #a30015;
+  box-shadow: 0 0 0 3px rgba(163,0,21,0.12);
+}
+
+.users-filter-clear-btn {
+  background: #fbe9ee;
+  color: #a30015;
+  border: 1.4px solid #a30015;
+  border-radius: 8px;
+  height: 36px;
+  padding: 0 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, transform 0.12s;
+}
+
+.users-filter-clear-btn:hover {
+  background: #fff0f4;
+  color: #7b1531;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .users-table-filter-row {
+    gap: 8px;
+    padding: 10px;
+  }
+  .users-table-filter-select,
+  .users-table-filter-input,
+  .users-filter-clear-btn {
+    height: 34px;
+    font-size: 0.95rem;
+  }
+}
+
+/* === Product details in modal === */
+.products-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
 }
 
 .product-card {
   background: #fff;
-  border: 1px solid #e5e5e5;
+  border: 1px solid #e6e6e6;
   border-radius: 10px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-  padding: 10px 12px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.product-card-header {
+  font-weight: 800;
+  color: #7b1531;
+  margin-bottom: 8px;
+}
+
+.product-thumb {
+  width: 140px;
+  height: 140px;
+  min-width: 140px;
+  min-height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1.5px solid #a30015;
+  background: #faf7f7;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.product-thumb.product-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #777;
+  font-size: 0.9rem;
 }
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 8px 10px;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 8px 12px;
 }
 
-.product-field { grid-column: span 4; display: flex; flex-direction: column; gap: 4px; }
-.product-field label { font-size: 0.86rem; color: #7b1531; font-weight: 600; }
-.product-field--full { grid-column: 1 / -1; }
-
-@media (max-width: 900px) {
-  .product-field { grid-column: span 6; }
-}
-@media (max-width: 600px) {
-  .product-field { grid-column: 1 / -1; }
-}
-
-.product-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-
-/* === Badges de estado (pagado/pendiente/cancelado) === */
-.status-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.9rem;
-  line-height: 1.2;
-}
-.status-pagado {
-  background: #e6f7ea;
-  color: #0a7a2a;
-  border: 1px solid #0a7a2a;
-}
-.status-pendiente {
-  background: #fff8e1;
-  color: #a15b00;
-  border: 1px solid #a15b00;
-}
-.status-cancelado {
-  background: #fde8eb;
-  color: #a30015;
-  border: 1px solid #a30015;
-}
-
-/* Badges para entidades con estado Activo/Desactivado */
-.status-activo {
-  background: #e6f7ea;
-  color: #0a7a2a;
-  border: 1px solid #0a7a2a;
-}
-.status-desactivado {
-  background: #fde8eb;
-  color: #a30015;
-  border: 1px solid #a30015;
-}
-
-
-
-/* Botón para limpiar filtros en barras de búsqueda */
-.users-filter-clear-btn {
-  margin-left: 8px;
-  padding: 8px 12px;
+.product-field {
+  background: #f7f7f9;
+  border: 1px solid #eee;
   border-radius: 8px;
-  background: #eef1f4;
-  color: #333;
-  border: 1px solid #ccd3db;
-  font-weight: 600;
-  cursor: pointer;
+  padding: 8px 10px;
+}
+.product-field label {
+  display: block;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 4px;
+}
+.product-field--full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+/* Sticky close area inside modal content */
+.modal-close-row {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 50; /* ensure above modal inner content */
+  display: flex;
+  justify-content: flex-start; /* left corner */
+  padding-top: 6px;
+}
+
+.modal-close-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: none;
+  background: #a30015;
+  color: #fff; /* ensures react-icons inherit white color */
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  transition: background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+  justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  cursor: pointer;
+  position: relative; /* for CSS-drawn X */
+}
+.modal-close-btn svg { display: none !important; }
+
+/* Draw a white X using two lines so it always shows even if SVG fails */
+.modal-close-btn::before,
+.modal-close-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 2.2px;
+  background: #fff;
+  border-radius: 2px;
+  transform-origin: center;
+  z-index: 1;
+}
+.modal-close-btn::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.modal-close-btn::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
-.users-filter-clear-btn:hover {
-  background: #e3e8ee;
-  border-color: #c0c8d2;
+.modal-close-btn:hover { background: #7b1531; }
+
+@media (max-width: 480px) {
+  .modal-close-btn { width: 36px; height: 36px; }
 }
 
 

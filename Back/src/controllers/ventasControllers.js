@@ -57,6 +57,7 @@ const crearOrden = async (req, res) => {
     for (const producto of productos) {
       const {
         productoId,
+        cantidad = 1,
         tipoFigura,
         base,
         altura,
@@ -87,8 +88,8 @@ const crearOrden = async (req, res) => {
         });
       }
 
-      // Calcular el total de m2
-      let total_m2 = 0;
+  // Calcular m2 por pieza
+  let m2_por_pieza = 0;
 
       // Área de la figura principal
       if (tipoFigura === "circulo") {
@@ -98,7 +99,7 @@ const crearOrden = async (req, res) => {
             message: `El producto con ID ${productoId} requiere 'radio' para el tipo círculo`,
           });
         }
-        total_m2 += Math.PI * Math.pow(radio, 2);
+  m2_por_pieza += Math.PI * Math.pow(radio, 2);
       } else if (tipoFigura === "ovalo") {
         if (!base || !altura) {
           return res.status(400).json({
@@ -106,7 +107,7 @@ const crearOrden = async (req, res) => {
             message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el tipo óvalo`,
           });
         }
-        total_m2 += Math.PI * (base / 2) * (altura / 2);
+  m2_por_pieza += Math.PI * (base / 2) * (altura / 2);
       } else if (tipoFigura === "L" || tipoFigura === "L invertida") {
         // Para L o L invertida necesitamos dos rectángulos
         if (!base || !altura) {
@@ -122,7 +123,7 @@ const crearOrden = async (req, res) => {
           });
         }
         // Área de la L = área del rectángulo 1 + área del rectángulo 2
-        total_m2 += base * altura + base2 * altura2;
+  m2_por_pieza += base * altura + base2 * altura2;
       } else {
         // Para cuadrado y rectangulo
         if (!base || !altura) {
@@ -131,28 +132,30 @@ const crearOrden = async (req, res) => {
             message: `El producto con ID ${productoId} requiere 'base' y 'altura'`,
           });
         }
-        total_m2 += base * altura;
+  m2_por_pieza += base * altura;
       }
 
       // Área del soclo (parte pequeña que cae debajo, cubre la esquina)
       if (soclo_base && soclo_altura) {
-        total_m2 += soclo_base * soclo_altura;
+        m2_por_pieza += soclo_base * soclo_altura;
       }
 
       // Área de la cubierta (parte que sube, ejemplo: salpicadero de cocina)
       if (cubierta_base && cubierta_altura) {
-        total_m2 += cubierta_base * cubierta_altura;
+        m2_por_pieza += cubierta_base * cubierta_altura;
       }
 
       // Calcular el subtotal de este producto basándose en los m2 y el precio del producto
       // Asumiendo que el producto tiene la cantidad_m2 que representa el precio por m2
-      const subtotalProducto = total_m2 * productoExiste.cantidad_m2;
+  const total_m2 = m2_por_pieza * Number(cantidad || 1);
+  const subtotalProducto = total_m2 * productoExiste.cantidad_m2;
       totalCotizacion += subtotalProducto;
 
       // Crear el registro en ventas_productos
       const ventaProducto = await VentasProductos.create({
         cotizacionId: nuevaCotizacion.ID,
         productoId,
+        cantidad: Number(cantidad || 1),
         tipoFigura,
         base: base || null,
         altura: altura || null,
@@ -394,6 +397,210 @@ const actualizarAnticipo = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Error interno del servidor",
+      error: error.message,
+    });
+  }
+};
+
+// Actualizar una orden completa (cliente, productos, anticipo y/o status)
+const actualizarOrden = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { ID_cliente, productos, anticipo, status } = req.body;
+
+    const orden = await Cotizacion.findByPk(id);
+    if (!orden) {
+      return res.status(404).json({
+        success: false,
+        message: `No se encontró la orden con ID: ${id}`,
+      });
+    }
+
+    // Cambiar cliente si se envía
+    if (ID_cliente !== undefined) {
+      const clienteExiste = await Cliente.findByPk(ID_cliente);
+      if (!clienteExiste) {
+        return res.status(404).json({
+          success: false,
+          message: `No se encontró el cliente con ID: ${ID_cliente}`,
+        });
+      }
+      orden.ID_cliente = ID_cliente;
+    }
+
+    // Reemplazar productos si se envían
+    if (productos !== undefined) {
+      if (!Array.isArray(productos) || productos.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Se debe enviar al menos un producto para actualizar",
+        });
+      }
+
+      // Borrar productos actuales
+      await VentasProductos.destroy({ where: { cotizacionId: id } });
+
+      let totalCotizacion = 0;
+      const productosNuevos = [];
+
+      for (const p of productos) {
+        const {
+          productoId,
+          cantidad = 1,
+          tipoFigura,
+          base,
+          altura,
+          radio,
+          base2,
+          altura2,
+          soclo_base,
+          soclo_altura,
+          cubierta_base,
+          cubierta_altura,
+          descripcion,
+        } = p;
+
+        const productoExiste = await Producto.findByPk(productoId);
+        if (!productoExiste) {
+          return res.status(404).json({
+            success: false,
+            message: `No se encontró el producto con ID: ${productoId}`,
+          });
+        }
+        if (!tipoFigura) {
+          return res.status(400).json({
+            success: false,
+            message: "Cada producto debe tener un tipoFigura especificado",
+          });
+        }
+
+  let m2_por_pieza = 0;
+        if (tipoFigura === "circulo") {
+          if (!radio) {
+            return res.status(400).json({
+              success: false,
+              message: `El producto con ID ${productoId} requiere 'radio' para el tipo círculo`,
+            });
+          }
+          m2_por_pieza += Math.PI * Math.pow(radio, 2);
+        } else if (tipoFigura === "ovalo") {
+          if (!base || !altura) {
+            return res.status(400).json({
+              success: false,
+              message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el tipo óvalo`,
+            });
+          }
+          m2_por_pieza += Math.PI * (base / 2) * (altura / 2);
+        } else if (tipoFigura === "L" || tipoFigura === "L invertida") {
+          if (!base || !altura) {
+            return res.status(400).json({
+              success: false,
+              message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el primer rectángulo de la L`,
+            });
+          }
+          if (!base2 || !altura2) {
+            return res.status(400).json({
+              success: false,
+              message: `El producto con ID ${productoId} requiere 'base2' y 'altura2' para el segundo rectángulo de la L`,
+            });
+          }
+          m2_por_pieza += base * altura + base2 * altura2;
+        } else {
+          if (!base || !altura) {
+            return res.status(400).json({
+              success: false,
+              message: `El producto con ID ${productoId} requiere 'base' y 'altura'`,
+            });
+          }
+          m2_por_pieza += base * altura;
+        }
+
+        if (soclo_base && soclo_altura) m2_por_pieza += soclo_base * soclo_altura;
+        if (cubierta_base && cubierta_altura)
+          m2_por_pieza += cubierta_base * cubierta_altura;
+
+        const total_m2 = m2_por_pieza * Number(cantidad || 1);
+        const subtotal = total_m2 * productoExiste.cantidad_m2;
+        totalCotizacion += subtotal;
+
+        const vp = await VentasProductos.create({
+          cotizacionId: id,
+          productoId,
+          cantidad: Number(cantidad || 1),
+          tipoFigura,
+          base: base || null,
+          altura: altura || null,
+          radio: radio || null,
+          base2: base2 || null,
+          altura2: altura2 || null,
+          soclo_base: soclo_base || null,
+          soclo_altura: soclo_altura || null,
+          cubierta_base: cubierta_base || null,
+          cubierta_altura: cubierta_altura || null,
+          total_m2: parseFloat(total_m2.toFixed(4)),
+          descripcion: descripcion || null,
+        });
+        productosNuevos.push(vp);
+      }
+
+      orden.total = parseFloat(totalCotizacion.toFixed(2));
+    }
+
+    // Actualizar anticipo si se envía
+    if (anticipo !== undefined) {
+      if (isNaN(anticipo) || Number(anticipo) < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "El campo 'anticipo' debe ser un número válido >= 0",
+        });
+      }
+      if (Number(anticipo) > Number(orden.total)) {
+        return res.status(400).json({
+          success: false,
+          message: `El anticipo ($${anticipo}) no puede ser mayor al total de la orden ($${orden.total})`,
+        });
+      }
+      orden.anticipo = parseFloat(Number(anticipo).toFixed(2));
+      if (orden.anticipo >= orden.total && status === undefined) {
+        orden.status = "pagado";
+      }
+    }
+
+    // Actualizar status si se envía
+    if (status !== undefined) {
+      if (!["pendiente", "pagado", "cancelado"].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Status inválido. Debe ser: pendiente, pagado o cancelado",
+        });
+      }
+      orden.status = status;
+    }
+
+    await orden.save();
+
+    // Responder con orden + productos
+    const ordenIncluida = await Cotizacion.findByPk(orden.ID, {
+      include: [
+        { model: Usuario, attributes: ["ID", "nombre", "correo"] },
+        { model: Cliente, attributes: ["ID", "nombre", "telefono", "rfc", "direccion"] },
+      ],
+    });
+    const productosResp = await VentasProductos.findAll({
+      where: { cotizacionId: orden.ID },
+      include: [{ model: Producto, attributes: ["ID", "nombre", "descripcion"] }],
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Orden actualizada exitosamente",
+      data: { cotizacion: ordenIncluida, productos: productosResp },
+    });
+  } catch (error) {
+    console.error("Error al actualizar la orden:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor al actualizar la orden",
       error: error.message,
     });
   }
@@ -1076,6 +1283,7 @@ module.exports = {
   crearOrden,
   obtenerOrdenes,
   obtenerOrdenPorId,
+  actualizarOrden,
   actualizarStatusOrden,
   actualizarAnticipo,
   calcularInventarioNecesario,

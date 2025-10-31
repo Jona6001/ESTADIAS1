@@ -45,10 +45,13 @@ const Sells = () => {
   // Filtro de cotizaciones
   const [cotFilterText, setCotFilterText] = useState("");
   const [cotFilterField, setCotFilterField] = useState("cliente");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [cotOrder, setCotOrder] = useState("recientes"); // 'recientes' | 'antiguos'
 
   // Formulario cotización
   const [form, setForm] = useState(initialCotizacion);
-  const [clienteSearch, setClienteSearch] = useState("");
+  // Eliminado buscador de cliente en modal para ahorrar espacio
   // opcional: búsqueda de productos (no usada actualmente)
 
   // Fecha y hora
@@ -173,18 +176,55 @@ const Sells = () => {
 
   const [editTarget, setEditTarget] = useState(null);
 
-  const openEditModal = (cot) => {
-    // Nota: no tenemos endpoint para editar productos de la cotización en backend
-    // Mantendremos edición solo de status/anticipo en otras acciones.
-    setForm({
-      ID_cliente: cot.ID_cliente,
-      productos: cot.productos ? [...cot.productos] : [],
-      anticipo: cot.anticipo || 0,
-      status: cot.status || "pendiente",
-    });
+  const openEditModal = async (cot) => {
+    // Abrir modal con datos base
     setEditTarget(cot);
     setModalOpen("edit");
     setErrorMsg("");
+
+    // Precargar valores básicos
+    setForm((prev) => ({
+      ...prev,
+      ID_cliente: cot.ID_cliente,
+      productos: [], // se cargarán abajo desde el detalle
+      anticipo: cot.anticipo || 0,
+      status: cot.status || "pendiente",
+    }));
+
+    // Cargar productos reales de la cotización para permitir edición completa
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_COTIZACIONES}/${cot.ID || cot.id}` , {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      const txt = await res.text();
+      let data; try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
+      if (!res.ok || data?.success === false) throw new Error(data?.message || "No se pudo cargar productos de la cotización");
+      const payload = data.data || data;
+      const productosDetalle = Array.isArray(payload?.productos) ? payload.productos : [];
+
+      // Mapear al formato del formulario de edición/creación
+      const mapped = productosDetalle.map((p) => ({
+        productoId: p.productoId || p.Producto?.ID || p.ID_producto || "",
+        cantidad: p.cantidad || 1,
+        tipoFigura: p.tipoFigura || p.tipo_figura || "rectangulo",
+        base: p.base ?? null,
+        altura: p.altura ?? null,
+        radio: p.radio ?? null,
+        base2: p.base2 ?? null,
+        altura2: p.altura2 ?? null,
+        soclo_base: p.soclo_base ?? null,
+        soclo_altura: p.soclo_altura ?? null,
+        cubierta_base: p.cubierta_base ?? null,
+        cubierta_altura: p.cubierta_altura ?? null,
+        descripcion: p.descripcion ?? "",
+      }));
+
+      setForm((prev) => ({ ...prev, productos: mapped }));
+    } catch (e) {
+      console.error("No se pudieron cargar productos para editar:", e);
+      // se deja el formulario con productos vacíos, usuario puede agregar si lo desea
+    }
   };
 
   const closeModal = () => {
@@ -194,11 +234,10 @@ const Sells = () => {
   };
 
   // Form handlers
-  const filteredClientes = clientes.filter((c) =>
-    (c.nombre || "").toLowerCase().includes(clienteSearch.toLowerCase()) ||
-    (c.telefono && c.telefono.includes(clienteSearch)) ||
-    (c.rfc && c.rfc.toLowerCase().includes(clienteSearch.toLowerCase()))
-  );
+  // Lista de clientes (sin buscador en modal de add/edit para mantener compacto)
+  const filteredClientes = clientes;
+  // Evita warning si el modal no está montado en esta vista
+  void filteredClientes;
 
   // Para productos, usamos la lista completa en el selector
 
@@ -226,12 +265,14 @@ const Sells = () => {
       ],
     });
   };
+  void handleAddProducto;
 
   const handleRemoveProducto = (idx) => {
     const next = [...form.productos];
     next.splice(idx, 1);
     setForm({ ...form, productos: next });
   };
+  void handleRemoveProducto;
 
   const handleProductoChange = (idx, field, value) => {
     const next = [...form.productos];
@@ -254,6 +295,84 @@ const Sells = () => {
     };
     setForm({ ...form, productos: next });
   };
+  void handleProductoChange;
+
+  // Validación con enfoque/scroll al primer error
+  const validateFormAndFocus = () => {
+    // Cliente
+    if (!form.ID_cliente) {
+      setErrorMsg("Selecciona un cliente.");
+      const el = document.getElementById("cliente-select");
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+      return false;
+    }
+    // Productos
+    if (!form.productos || form.productos.length === 0) {
+      setErrorMsg("Agrega al menos un producto.");
+      return false;
+    }
+    for (let i = 0; i < form.productos.length; i++) {
+      const p = form.productos[i];
+      // productoId
+      if (!p.productoId) {
+        setErrorMsg(`Selecciona el producto #${i + 1}.`);
+        const el = document.getElementById(`prod-${i}-productoId`);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+        return false;
+      }
+      // cantidad
+      if (!p.cantidad || Number(p.cantidad) < 1) {
+        setErrorMsg(`La cantidad del producto #${i + 1} debe ser al menos 1.`);
+        const el = document.getElementById(`prod-${i}-cantidad`);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+        return false;
+      }
+      // tipoFigura
+      if (!p.tipoFigura) {
+        setErrorMsg(`Selecciona el tipo de figura del producto #${i + 1}.`);
+        const el = document.getElementById(`prod-${i}-tipoFigura`);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+        return false;
+      }
+      // campos según figura
+      if (p.tipoFigura === 'circulo') {
+        if (!p.radio || Number(p.radio) <= 0) {
+          setErrorMsg(`Ingresa el radio (> 0) para el producto #${i + 1}.`);
+          const el = document.getElementById(`prod-${i}-radio`);
+          if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+          return false;
+        }
+      } else {
+        if (!p.base || Number(p.base) <= 0) {
+          setErrorMsg(`Ingresa la base (> 0) para el producto #${i + 1}.`);
+          const el = document.getElementById(`prod-${i}-base`);
+          if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+          return false;
+        }
+        if (!p.altura || Number(p.altura) <= 0) {
+          setErrorMsg(`Ingresa la altura (> 0) para el producto #${i + 1}.`);
+          const el = document.getElementById(`prod-${i}-altura`);
+          if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+          return false;
+        }
+        if ((p.tipoFigura === 'L' || p.tipoFigura === 'L invertida')) {
+          if (!p.base2 || Number(p.base2) <= 0) {
+            setErrorMsg(`Ingresa la base 2 (> 0) para el producto #${i + 1}.`);
+            const el = document.getElementById(`prod-${i}-base2`);
+            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+            return false;
+          }
+          if (!p.altura2 || Number(p.altura2) <= 0) {
+            setErrorMsg(`Ingresa la altura 2 (> 0) para el producto #${i + 1}.`);
+            const el = document.getElementById(`prod-${i}-altura2`);
+            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  };
 
   // CRUD Cotizaciones
   const handleAdd = async (e) => {
@@ -261,18 +380,8 @@ const Sells = () => {
     setErrorMsg("");
     const token = localStorage.getItem("token");
     const user = JSON.parse(localStorage.getItem("user") || "{}");
-    if (!user || !user.ID) {
-      setErrorMsg("No se encontró el usuario autenticado. Inicia sesión.");
-      return;
-    }
-    if (!form.ID_cliente) {
-      setErrorMsg("Selecciona un cliente.");
-      return;
-    }
-    if (!form.productos || form.productos.length === 0) {
-      setErrorMsg("Agrega al menos un producto.");
-      return;
-    }
+    if (!user || !user.ID) { setErrorMsg("No se encontró el usuario autenticado. Inicia sesión."); return; }
+    if (!validateFormAndFocus()) return;
 
     try {
       const cleanForm = {
@@ -313,6 +422,24 @@ const Sells = () => {
         throw new Error(data?.message || data?.error || "Error al crear cotización");
       }
 
+      // Intentar descontar inventario automáticamente (si cumple condiciones)
+      const newId = data?.data?.cotizacion?.ID || data?.cotizacion?.ID;
+      if (newId) {
+        try {
+          const resCalc = await fetch(`${API_COTIZACIONES}/${newId}/calcular-inventario`, { headers: { Authorization: `Bearer ${token}` } });
+          const txtCalc = await resCalc.text();
+          let dCalc; try { dCalc = JSON.parse(txtCalc); } catch { dCalc = { success: false, message: txtCalc }; }
+          if (resCalc.ok && dCalc?.success && dCalc?.data?.puede_confirmar) {
+            const productos_confirmados = (form.productos || []).map(p => ({ productoId: p.productoId, guardar_residuo: false, observaciones: null }));
+            await fetch(`${API_COTIZACIONES}/${newId}/confirmar-inventario`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ productos_confirmados, ID_usuario: user.ID }),
+            });
+          }
+  } catch { /* si falla, solo no descuenta automáticamente */ }
+      }
+
       closeModal();
       setForm(initialCotizacion);
       await fetchAll();
@@ -321,39 +448,64 @@ const Sells = () => {
       setErrorMsg("Error al crear la cotización");
     }
   };
+  void handleAdd;
 
   const handleEdit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     if (!editTarget) { setErrorMsg("No hay cotización seleccionada"); return; }
+    if (!validateFormAndFocus()) return;
+
     const id = editTarget.ID || editTarget.id;
     const token = localStorage.getItem("token");
     const headers = { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` };
 
-    try {
-      // Actualizar anticipo si cambió
-      if (form.anticipo !== undefined && form.anticipo !== editTarget.anticipo) {
-        const resAnt = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({ anticipo: Number(form.anticipo) }),
-        });
-        const txtAnt = await resAnt.text();
-        let dAnt; try { dAnt = JSON.parse(txtAnt); } catch { dAnt = { message: txtAnt }; }
-        if (!resAnt.ok || dAnt?.success === false) throw new Error(dAnt?.message || "No se pudo actualizar el anticipo");
-      }
+    // Preparar payload
+    const payload = {
+      ID_cliente: form.ID_cliente,
+      productos: form.productos.map((p) => ({
+        productoId: p.productoId,
+        cantidad: p.cantidad,
+        tipoFigura: p.tipoFigura,
+        base: p.base,
+        altura: p.altura,
+        radio: p.radio,
+        base2: p.base2,
+        altura2: p.altura2,
+        soclo_base: p.soclo_base,
+        soclo_altura: p.soclo_altura,
+        cubierta_base: p.cubierta_base,
+        cubierta_altura: p.cubierta_altura,
+        descripcion: p.descripcion,
+      })),
+      anticipo: form.anticipo,
+      status: form.status,
+    };
 
-      // Actualizar status si cambió
-      if (form.status && form.status !== editTarget.status) {
-        const resSt = await fetch(`${API_COTIZACIONES}/${id}/status`, {
-          method: "PATCH",
-          headers,
-          body: JSON.stringify({ status: form.status }),
-        });
-        const txtSt = await resSt.text();
-        let dSt; try { dSt = JSON.parse(txtSt); } catch { dSt = { message: txtSt }; }
-        if (!resSt.ok || dSt?.success === false) throw new Error(dSt?.message || "No se pudo actualizar el estado");
-      }
+    try {
+      const res = await fetch(`${API_COTIZACIONES}/${id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const txt = await res.text();
+      let data; try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
+      if (!res.ok || data?.success === false) throw new Error(data?.message || data?.error || "No se pudo actualizar la cotización");
+
+      // Intentar descontar inventario automáticamente (si cumple condiciones)
+      try {
+        const resCalc = await fetch(`${API_COTIZACIONES}/${id}/calcular-inventario`, { headers: { Authorization: `Bearer ${token}` } });
+        const txtCalc = await resCalc.text();
+        let dCalc; try { dCalc = JSON.parse(txtCalc); } catch { dCalc = { success: false, message: txtCalc }; }
+        if (resCalc.ok && dCalc?.success && dCalc?.data?.puede_confirmar) {
+          const productos_confirmados = (form.productos || []).map(p => ({ productoId: p.productoId, guardar_residuo: false, observaciones: null }));
+          await fetch(`${API_COTIZACIONES}/${id}/confirmar-inventario`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ productos_confirmados, ID_usuario: JSON.parse(localStorage.getItem("user") || "{}")?.ID }),
+          });
+        }
+      } catch { /* si falla, no detenemos el flujo */ }
 
       setModalOpen(null);
       setEditTarget(null);
@@ -364,20 +516,65 @@ const Sells = () => {
     }
   };
 
+  // Evita warning de variable sin usar si el modal de edición no se monta en ciertos estados
+  void handleEdit;
+
   const handleConfirmVenta = async () => {
     if (!ventaResumen) return;
     setErrorMsg("");
     const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
     const id = ventaResumen.ID || ventaResumen.id;
     try {
-      const res = await fetch(`${API_COTIZACIONES}/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: "pagado" }),
+      // 1) Obtener detalles (total, anticipo y productos)
+      const resDet = await fetch(`${API_COTIZACIONES}/${id}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+      const txtDet = await resDet.text();
+      let dataDet; try { dataDet = JSON.parse(txtDet); } catch { dataDet = { success: false, message: txtDet }; }
+      if (!resDet.ok || dataDet?.success === false) throw new Error(dataDet?.message || "No se pudo obtener detalles de la orden");
+      const payload = dataDet.data || dataDet;
+      const cot = payload.cotizacion || payload;
+      const prods = Array.isArray(payload.productos) ? payload.productos : [];
+
+      // 2) Asegurar anticipo = total (esto marca pagado en backend y supera el umbral del 50%)
+      const total = Number(cot.total || 0);
+      if (Number(cot.anticipo || 0) < total) {
+        const resAnti = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ anticipo: total })
+        });
+        const txtAnti = await resAnti.text();
+        let dAnti; try { dAnti = JSON.parse(txtAnti); } catch { dAnti = { success: false, message: txtAnti }; }
+        if (!resAnti.ok || dAnti?.success === false) throw new Error(dAnti?.message || "No se pudo actualizar el anticipo");
+      }
+
+      // 3) Calcular inventario
+      const resCalc = await fetch(`${API_COTIZACIONES}/${id}/calcular-inventario`, { headers: { Authorization: `Bearer ${token}` } });
+      const txtCalc = await resCalc.text();
+      let dCalc; try { dCalc = JSON.parse(txtCalc); } catch { dCalc = { success: false, message: txtCalc }; }
+      if (!resCalc.ok || dCalc?.success === false) throw new Error(dCalc?.message || "No se pudo calcular inventario");
+      if (!dCalc?.data?.puede_confirmar) {
+        const errores = (dCalc?.data?.errores_inventario || []).join("; ");
+        throw new Error(errores || "Inventario insuficiente para confirmar la venta");
+      }
+
+      // 4) Confirmar inventario (descontar piezas)
+      const productos_confirmados = prods.map(p => ({
+        productoId: p.productoId || p.ID_producto || p.Producto?.ID,
+        guardar_residuo: false,
+        observaciones: null,
+      })).filter(x => x.productoId);
+
+      const resConf = await fetch(`${API_COTIZACIONES}/${id}/confirmar-inventario`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ productos_confirmados, ID_usuario: user?.ID })
       });
-      const txt = await res.text();
-      let data; try { data = JSON.parse(txt); } catch { data = { message: txt }; }
-      if (!res.ok || data?.success === false) throw new Error(data?.mensaje || data?.message || "No se puede realizar la venta");
+      const txtConf = await resConf.text();
+      let dConf; try { dConf = JSON.parse(txtConf); } catch { dConf = { success: false, message: txtConf }; }
+      if (!resConf.ok || dConf?.success === false) throw new Error(dConf?.message || "No se pudo confirmar inventario");
+
+      // 5) Cerrar modal y refrescar
       setModalOpen(null);
       setVentaResumen(null);
       await fetchAll();
@@ -512,7 +709,7 @@ const Sells = () => {
       </nav>
 
   <div style={{ padding: 24, paddingTop: 'calc(var(--navbar-offset) + 2px)', maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 30 }}>
+        <div className="top-actions">
           <button className="open-add-modal-btn" onClick={openAddModal}>
             <FaPlus style={{ marginRight: 8 }} /> Nueva Cotización
           </button>
@@ -524,14 +721,18 @@ const Sells = () => {
             className="users-table-filter-select"
             value={cotFilterField}
             onChange={(e) => {
-              setCotFilterField(e.target.value);
+              const v = e.target.value;
+              setCotFilterField(v);
               setCotFilterText("");
+              setDateStart("");
+              setDateEnd("");
             }}
           >
             <option value="cliente">Cliente</option>
             <option value="vendedor">Vendedor</option>
             <option value="estado">Estado</option>
             <option value="id">ID</option>
+            <option value="fecha">Fecha</option>
           </select>
           {cotFilterField === "estado" ? (
             <select
@@ -544,6 +745,22 @@ const Sells = () => {
               <option value="pagado">Pagado</option>
               <option value="cancelado">Cancelado</option>
             </select>
+          ) : cotFilterField === "fecha" ? (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input
+                type="date"
+                className="users-table-filter-input"
+                value={dateStart}
+                onChange={(e) => setDateStart(e.target.value)}
+              />
+              <span style={{ alignSelf: 'center', color: '#555' }}>a</span>
+              <input
+                type="date"
+                className="users-table-filter-input"
+                value={dateEnd}
+                onChange={(e) => setDateEnd(e.target.value)}
+              />
+            </div>
           ) : (
             <input
               className="users-table-filter-input"
@@ -552,10 +769,27 @@ const Sells = () => {
               onChange={(e) => setCotFilterText(e.target.value)}
             />
           )}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="users-filter-title" style={{ marginLeft: 6 }}>Orden:</span>
+            <select
+              className="users-table-filter-select"
+              value={cotOrder}
+              onChange={(e) => setCotOrder(e.target.value)}
+            >
+              <option value="recientes">Más recientes</option>
+              <option value="antiguos">Más antiguos</option>
+            </select>
+          </div>
           <button
             type="button"
             className="users-filter-clear-btn"
-            onClick={() => setCotFilterText("")}
+            onClick={() => {
+              setCotFilterText("");
+              setDateStart("");
+              setDateEnd("");
+              setCotOrder("recientes");
+              setCotFilterField("cliente");
+            }}
             title="Limpiar filtro"
           >
             <FaTimes /> Limpiar
@@ -590,27 +824,48 @@ const Sells = () => {
                     <td colSpan="9">No hay cotizaciones registradas</td>
                   </tr>
                 ) : (
-                  // Aplicar filtro a cotizaciones
+                  // Filtrar y ordenar cotizaciones
                   cotizaciones
                     .filter((cot) => {
-                      const cliente = (cot.Cliente?.nombre || cot.cliente?.nombre || "").toLowerCase();
-                      const vendedor = (cot.Usuario?.nombre || cot.usuario?.nombre || "").toLowerCase();
+                      const clienteNombre = (cot.Cliente?.nombre || cot.cliente?.nombre || "").toLowerCase();
+                      const vendedorNombre = (cot.Usuario?.nombre || cot.usuario?.nombre || "").toLowerCase();
                       const estado = (cot.status || "").toLowerCase();
                       const idStr = String(cot.ID || cot.id || "");
                       const q = (cotFilterText || "").toLowerCase().trim();
+
+                      // Filtro por fecha (rango)
+                      if (cotFilterField === 'fecha') {
+                        if (!dateStart && !dateEnd) return true;
+                        const t = new Date(cot.fecha_creacion || cot.createdAt || cot.fecha || 0).getTime();
+                        if (!t) return false;
+                        const start = dateStart ? new Date(`${dateStart}T00:00:00`).getTime() : null;
+                        const end = dateEnd ? new Date(`${dateEnd}T23:59:59`).getTime() : null;
+                        if (start && end) return t >= start && t <= end;
+                        if (start && !end) return t >= start;
+                        if (!start && end) return t <= end;
+                        return true;
+                      }
+
+                      // Filtros por texto/estado/id
                       if (!q) return true;
                       switch (cotFilterField) {
-                        case "cliente":
-                          return cliente.includes(q);
-                        case "vendedor":
-                          return vendedor.includes(q);
-                        case "estado":
+                        case 'cliente':
+                          return clienteNombre.includes(q);
+                        case 'vendedor':
+                          return vendedorNombre.includes(q);
+                        case 'estado':
                           return estado.includes(q);
-                        case "id":
+                        case 'id':
                           return idStr.includes(q);
                         default:
                           return true;
                       }
+                    })
+                    .sort((a, b) => {
+                      const ta = new Date(a.fecha_creacion || a.createdAt || a.fecha || 0).getTime();
+                      const tb = new Date(b.fecha_creacion || b.createdAt || b.fecha || 0).getTime();
+                      if (cotOrder === 'antiguos') return ta - tb;
+                      return tb - ta; // recientes primero
                     })
                     .map((cot) => {
                     const cliente = cot.Cliente || cot.cliente || {};
@@ -664,214 +919,21 @@ const Sells = () => {
           </div>
         </section>
 
-        {/* Modal para crear/editar cotización */}
-        {(modalOpen === 'add' || modalOpen === 'edit') && (
-          <div className="modal-overlay">
-            <div className="modal-content" style={{ width: '70vw', maxWidth: 900, maxHeight: '75vh', overflowY: 'auto' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: 10 }}>{modalOpen === 'add' ? 'Nueva Cotización' : 'Editar Cotización'}</h2>
-              <form className="user-form" onSubmit={modalOpen === 'add' ? handleAdd : handleEdit}>
-                <label htmlFor="clienteSearch">Buscar cliente</label>
-                <input
-                  id="clienteSearch"
-                  className="user-input"
-                  type="text"
-                  placeholder="Buscar por nombre, teléfono o RFC"
-                  value={clienteSearch}
-                  onChange={e => setClienteSearch(e.target.value)}
-                  style={{ marginBottom: 6 }}
-                />
-                <label htmlFor="clienteSelect">Cliente</label>
-                <select
-                  id="clienteSelect"
-                  className="user-input"
-                  name="ID_cliente"
-                  value={form.ID_cliente}
-                  onChange={e => {
-                    setForm({ ...form, ID_cliente: e.target.value });
-                  }}
-                  disabled={modalOpen === 'edit'}
-                  required
-                >
-                  <option value="">Selecciona un cliente</option>
-                  {filteredClientes.map(c => (
-                    <option key={c.ID} value={c.ID}>{c.nombre} {c.telefono ? `(${c.telefono})` : ''} {c.rfc ? `RFC: ${c.rfc}` : ''}</option>
-                  ))}
-                </select>
-
-                <label htmlFor="anticipoInput">Anticipo</label>
-                <input
-                  id="anticipoInput"
-                  className="user-input"
-                  name="anticipo"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={form.anticipo || ''}
-                  onChange={e => setForm({ ...form, anticipo: e.target.value })}
-                  placeholder="Anticipo"
-                  required
-                />
-
-                <label>Productos</label>
-                <div className="products-list">
-                  {form.productos.map((p, idx) => (
-                    <div className="product-card" key={`${idx}-${p.productoId || 'new'}`}>
-                      <div className="product-grid">
-                        <div className="product-field">
-                          <label>Producto</label>
-                          <select
-                            className="user-input"
-                            value={p.productoId || ''}
-                            onChange={e => handleProductoChange(idx, 'productoId', e.target.value)}
-                            required
-                            disabled={productos.length === 0 || modalOpen === 'edit'}
-                          >
-                            <option value="">{productos.length === 0 ? 'No hay productos' : 'Selecciona producto'}</option>
-                            {productos.map(pr => (
-                              <option key={pr.ID} value={pr.ID}>{pr.nombre}{pr.descripcion ? ` - ${pr.descripcion}` : ''}</option>
-                            ))}
-                          </select>
-                          {productos.length === 0 && (
-                            <div style={{ color: '#a30015', marginTop: 6 }}>No hay productos. Agrega productos primero.</div>
-                          )}
-                        </div>
-                        <div className="product-field">
-                          <label>Cantidad</label>
-                          <input className="user-input" type="number" min={1} value={p.cantidad} onChange={e => handleProductoChange(idx, 'cantidad', e.target.value)} required disabled={modalOpen === 'edit'} />
-                        </div>
-                        <div className="product-field">
-                          <label>Figura</label>
-                          <select className="user-input" value={p.tipoFigura} onChange={e => handleProductoChange(idx, 'tipoFigura', e.target.value)} required disabled={modalOpen === 'edit'}>
-                            <option value="cuadrado">Cuadrado</option>
-                            <option value="rectangulo">Rectángulo</option>
-                            <option value="circulo">Círculo</option>
-                            <option value="ovalo">Óvalo</option>
-                            <option value="L">L</option>
-                            <option value="L invertida">L invertida</option>
-                          </select>
-                        </div>
-
-                        {p.tipoFigura === 'circulo' && (
-                          <div className="product-field">
-                            <label>Radio</label>
-                            <input className="user-input" type="number" min={0} step={0.01} value={p.radio || ''} onChange={e => handleProductoChange(idx, 'radio', e.target.value)} placeholder="Radio" required disabled={modalOpen === 'edit'} />
-                          </div>
-                        )}
-
-                        {p.tipoFigura === 'ovalo' && (
-                          <>
-                            <div className="product-field">
-                              <label>Base</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.base || ''} onChange={e => handleProductoChange(idx, 'base', e.target.value)} placeholder="Base" required disabled={modalOpen === 'edit'} />
-                            </div>
-                            <div className="product-field">
-                              <label>Altura</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.altura || ''} onChange={e => handleProductoChange(idx, 'altura', e.target.value)} placeholder="Altura" required disabled={modalOpen === 'edit'} />
-                            </div>
-                          </>
-                        )}
-
-                        {(p.tipoFigura === 'L' || p.tipoFigura === 'L invertida') && (
-                          <>
-                            <div className="product-field">
-                              <label>Base 1</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.base || ''} onChange={e => handleProductoChange(idx, 'base', e.target.value)} placeholder="Base 1" required disabled={modalOpen === 'edit'} />
-                            </div>
-                            <div className="product-field">
-                              <label>Altura 1</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.altura || ''} onChange={e => handleProductoChange(idx, 'altura', e.target.value)} placeholder="Altura 1" required disabled={modalOpen === 'edit'} />
-                            </div>
-                            <div className="product-field">
-                              <label>Base 2</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.base2 || ''} onChange={e => handleProductoChange(idx, 'base2', e.target.value)} placeholder="Base 2" required disabled={modalOpen === 'edit'} />
-                            </div>
-                            <div className="product-field">
-                              <label>Altura 2</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.altura2 || ''} onChange={e => handleProductoChange(idx, 'altura2', e.target.value)} placeholder="Altura 2" required disabled={modalOpen === 'edit'} />
-                            </div>
-                          </>
-                        )}
-
-                        {(p.tipoFigura === 'cuadrado' || p.tipoFigura === 'rectangulo') && (
-                          <>
-                            <div className="product-field">
-                              <label>Base</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.base || ''} onChange={e => handleProductoChange(idx, 'base', e.target.value)} placeholder="Base" required disabled={modalOpen === 'edit'} />
-                            </div>
-                            <div className="product-field">
-                              <label>Altura</label>
-                              <input className="user-input" type="number" min={0} step={0.01} value={p.altura || ''} onChange={e => handleProductoChange(idx, 'altura', e.target.value)} placeholder="Altura" required disabled={modalOpen === 'edit'} />
-                            </div>
-                          </>
-                        )}
-
-                        <div className="product-field">
-                          <label>Soclo Base</label>
-                          <input className="user-input" type="number" min={0} step={0.01} value={p.soclo_base || ''} onChange={e => handleProductoChange(idx, 'soclo_base', e.target.value)} placeholder="Base" disabled={modalOpen === 'edit'} />
-                        </div>
-                        <div className="product-field">
-                          <label>Soclo Altura</label>
-                          <input className="user-input" type="number" min={0} step={0.01} value={p.soclo_altura || ''} onChange={e => handleProductoChange(idx, 'soclo_altura', e.target.value)} placeholder="Altura" disabled={modalOpen === 'edit'} />
-                        </div>
-
-                        <div className="product-field">
-                          <label>Cubierta Base</label>
-                          <input className="user-input" type="number" min={0} step={0.01} value={p.cubierta_base || ''} onChange={e => handleProductoChange(idx, 'cubierta_base', e.target.value)} placeholder="Base" disabled={modalOpen === 'edit'} />
-                        </div>
-                        <div className="product-field">
-                          <label>Cubierta Altura</label>
-                          <input className="user-input" type="number" min={0} step={0.01} value={p.cubierta_altura || ''} onChange={e => handleProductoChange(idx, 'cubierta_altura', e.target.value)} placeholder="Altura" disabled={modalOpen === 'edit'} />
-                        </div>
-
-                        <div className="product-field product-field--full">
-                          <label>Descripción</label>
-                          <input className="user-input" type="text" value={p.descripcion || ''} onChange={e => handleProductoChange(idx, 'descripcion', e.target.value)} placeholder="Descripción" disabled={modalOpen === 'edit'} />
-                        </div>
-                      </div>
-                      <div className="product-actions">
-                        <button type="button" className="delete-btn" onClick={() => handleRemoveProducto(idx)} title="Quitar" disabled={modalOpen === 'edit'}>
-                          <FaTrash /> Quitar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button type="button" className="add-btn" style={{ marginBottom: 10 }} onClick={handleAddProducto}>
-                  <FaPlus style={{ marginRight: 6 }} /> Agregar producto
-                </button>
-
-                <label htmlFor="statusSelect">Estado</label>
-                <select
-                  id="statusSelect"
-                  className="user-input"
-                  name="status"
-                  value={form.status}
-                  onChange={e => setForm({ ...form, status: e.target.value })}
-                  required
-                >
-                  <option value="pendiente">Pendiente</option>
-                  <option value="pagado">Pagado</option>
-                  <option value="cancelado">Cancelado</option>
-                </select>
-
-                {errorMsg && <div style={{ color: "#a30015", marginBottom: 8 }}>{errorMsg}</div>}
-                <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
-                  <button type="submit" className="add-btn" style={{ flex: 1 }}>
-                    <FaSave style={{ marginRight: 6 }} /> {modalOpen === 'add' ? 'Guardar' : 'Actualizar'}
-                  </button>
-                  <button type="button" className="cancel-btn" onClick={closeModal} style={{ flex: 1 }}>
-                    <FaTimes style={{ marginRight: 6 }} /> Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
         {/* Modal de confirmación de venta */}
         {modalOpen === 'confirmVenta' && ventaResumen && (
           <div className="modal-overlay">
-            <div className="modal-content" style={{ width: 420, maxWidth: '90vw', maxHeight: '70vh', overflowY: 'auto', color: '#222' }}>
+            <div className="modal-content" style={{ width: 420, maxWidth: '90vw', maxHeight: '70vh', overflowY: 'auto', color: '#222', position: 'relative' }}>
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => setModalOpen(null)}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
               <h2 style={{ fontSize: '1.1rem', marginBottom: 10, color: '#111' }}>Confirmar venta</h2>
               <div style={{ marginBottom: 10 }}>
                 <strong>Cliente:</strong> {clientes.find(c => c.ID === ventaResumen.ID_cliente)?.nombre || '-'}<br />
@@ -902,10 +964,297 @@ const Sells = () => {
           </div>
         )}
 
+        {/* Modal de crear/editar cotización */}
+        {(modalOpen === 'add' || modalOpen === 'edit') && (
+          <div className="modal-overlay" onClick={closeModal}>
+            <div
+              className="modal-content compact"
+              style={{ color: '#111', width: '90vw', maxWidth: 1200, maxHeight: '80vh', overflowY: 'auto', position: 'relative' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={closeModal}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
+              <h2 style={{ fontSize: '1.15rem', marginTop: 4, marginBottom: 12 }}>
+                {modalOpen === 'edit' ? `Editar cotización${editTarget?.ID ? ` #${editTarget.ID}` : ''}` : 'Nueva cotización'}
+              </h2>
+              {errorMsg && (
+                <div style={{ color: '#a30015', marginBottom: 10 }}>{errorMsg}</div>
+              )}
+              <form onSubmit={modalOpen === 'edit' ? handleEdit : handleAdd} className="user-form">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                  <div>
+                    <label htmlFor="cliente-select">Nombre del cliente</label>
+                    <select
+                      id="cliente-select"
+                      className="user-input"
+                      value={form.ID_cliente || ''}
+                      onChange={(e) => setForm({ ...form, ID_cliente: Number(e.target.value) })}
+                    >
+                      <option value="">Selecciona un cliente…</option>
+                      {(clientes || []).map((c) => (
+                        <option key={c.ID} value={c.ID}>{c.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>Anticipo</label>
+                    <input
+                      className="user-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.anticipo ?? 0}
+                      onChange={(e) => setForm({ ...form, anticipo: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label>Estado de la cotización</label>
+                    <select
+                      className="user-input"
+                      value={form.status || 'pendiente'}
+                      onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    >
+                      <option value="pendiente">Pendiente</option>
+                      <option value="pagado">Pagado</option>
+                      <option value="cancelado">Cancelado</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0 6px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Productos</h3>
+                  <button type="button" className="add-btn" onClick={handleAddProducto}>
+                    <FaPlus style={{ marginRight: 6 }} /> Agregar producto
+                  </button>
+                </div>
+
+                <div className="products-list">
+                  {(form.productos || []).length === 0 ? (
+                    <div style={{ color: '#666', fontSize: '.92rem', marginBottom: 8 }}>Aún no hay productos agregados.</div>
+                  ) : null}
+
+                  {(form.productos || []).map((p, i) => {
+                    const prodMatch = productos.find((pr) => pr.ID === (p.productoId || p.ID_producto));
+                    const imgUrl = prodMatch?.imagen || prodMatch?.image || prodMatch?.img || null;
+                    return (
+                      <div key={`edit-prod-${i}`} className="product-card">
+                        <div className="product-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>Producto {i + 1}</span>
+                          <button type="button" className="cancel-btn" onClick={() => handleRemoveProducto(i)}>Quitar</button>
+                        </div>
+                        {imgUrl ? (
+                          <img src={imgUrl} alt={prodMatch?.nombre || `Producto ${i + 1}`} className="product-thumb" />
+                        ) : (
+                          <div className="product-thumb product-thumb--placeholder">Sin imagen</div>
+                        )}
+                        <div className="product-grid">
+                          <div className="product-field">
+                            <label htmlFor={`prod-${i}-productoId`}>Nombre del producto</label>
+                            <select
+                              id={`prod-${i}-productoId`}
+                              className="user-input"
+                              value={p.productoId || ''}
+                              onChange={(e) => handleProductoChange(i, 'productoId', Number(e.target.value))}
+                            >
+                              <option value="">Selecciona un producto…</option>
+                              {(productos || []).map((pr) => (
+                                <option key={pr.ID} value={pr.ID}>{pr.nombre}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="product-field">
+                            <label htmlFor={`prod-${i}-cantidad`}>Cantidad de piezas</label>
+                            <input
+                              id={`prod-${i}-cantidad`}
+                              className="user-input"
+                              type="number"
+                              min="1"
+                              value={p.cantidad ?? 1}
+                              onChange={(e) => handleProductoChange(i, 'cantidad', e.target.value)}
+                            />
+                          </div>
+                          <div className="product-field">
+                            <label htmlFor={`prod-${i}-tipoFigura`}>Tipo de figura</label>
+                            <select
+                              id={`prod-${i}-tipoFigura`}
+                              className="user-input"
+                              value={p.tipoFigura || 'rectangulo'}
+                              onChange={(e) => handleProductoChange(i, 'tipoFigura', e.target.value)}
+                            >
+                              <option value="rectangulo">Rectángulo</option>
+                              <option value="cuadrado">Cuadrado</option>
+                              <option value="circulo">Círculo</option>
+                              <option value="ovalo">Óvalo</option>
+                              <option value="L">L</option>
+                              <option value="L invertida">L invertida</option>
+                            </select>
+                          </div>
+
+                          {p.tipoFigura === 'circulo' ? (
+                            <div className="product-field">
+                              <label htmlFor={`prod-${i}-radio`}>Radio (cm)</label>
+                              <input
+                                id={`prod-${i}-radio`}
+                                className="user-input"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={p.radio ?? ''}
+                                onChange={(e) => handleProductoChange(i, 'radio', e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <div className="product-field">
+                                <label htmlFor={`prod-${i}-base`}>Base (cm)</label>
+                                <input
+                                  id={`prod-${i}-base`}
+                                  className="user-input"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={p.base ?? ''}
+                                  onChange={(e) => handleProductoChange(i, 'base', e.target.value)}
+                                />
+                              </div>
+                              <div className="product-field">
+                                <label htmlFor={`prod-${i}-altura`}>Altura (cm)</label>
+                                <input
+                                  id={`prod-${i}-altura`}
+                                  className="user-input"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={p.altura ?? ''}
+                                  onChange={(e) => handleProductoChange(i, 'altura', e.target.value)}
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          {(p.tipoFigura === 'L' || p.tipoFigura === 'L invertida') && (
+                            <>
+                              <div className="product-field">
+                                <label htmlFor={`prod-${i}-base2`}>Base 2 (cm)</label>
+                                <input
+                                  id={`prod-${i}-base2`}
+                                  className="user-input"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={p.base2 ?? ''}
+                                  onChange={(e) => handleProductoChange(i, 'base2', e.target.value)}
+                                />
+                              </div>
+                              <div className="product-field">
+                                <label htmlFor={`prod-${i}-altura2`}>Altura 2 (cm)</label>
+                                <input
+                                  id={`prod-${i}-altura2`}
+                                  className="user-input"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={p.altura2 ?? ''}
+                                  onChange={(e) => handleProductoChange(i, 'altura2', e.target.value)}
+                                />
+                              </div>
+                            </>
+                          )}
+
+                          <div className="product-field">
+                            <label>Soclo (base)</label>
+                            <input
+                              className="user-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={p.soclo_base ?? ''}
+                              onChange={(e) => handleProductoChange(i, 'soclo_base', e.target.value)}
+                            />
+                          </div>
+                          <div className="product-field">
+                            <label>Soclo (altura)</label>
+                            <input
+                              className="user-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={p.soclo_altura ?? ''}
+                              onChange={(e) => handleProductoChange(i, 'soclo_altura', e.target.value)}
+                            />
+                          </div>
+                          <div className="product-field">
+                            <label>Cubierta (base)</label>
+                            <input
+                              className="user-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={p.cubierta_base ?? ''}
+                              onChange={(e) => handleProductoChange(i, 'cubierta_base', e.target.value)}
+                            />
+                          </div>
+                          <div className="product-field">
+                            <label>Cubierta (altura)</label>
+                            <input
+                              className="user-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={p.cubierta_altura ?? ''}
+                              onChange={(e) => handleProductoChange(i, 'cubierta_altura', e.target.value)}
+                            />
+                          </div>
+                          <div className="product-field product-field--full">
+                            <label>Descripción del producto</label>
+                            <textarea
+                              className="user-input"
+                              rows={2}
+                              value={p.descripcion || ''}
+                              onChange={(e) => handleProductoChange(i, 'descripcion', e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="modal-btn-row" style={{ marginTop: 8 }}>
+                  <button type="submit" className="add-btn">
+                    <FaSave style={{ marginRight: 6 }} /> {modalOpen === 'edit' ? 'Actualizar' : 'Guardar'}
+                  </button>
+                  <button type="button" className="cancel-btn" onClick={closeModal}>
+                    <FaTimes style={{ marginRight: 6 }} /> Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Modal de confirmación para cancelar cotización */}
         {showDeleteConfirm && (
           <div className="modal-overlay">
-            <div className="modal-content" style={{ width: 380, maxWidth: '90vw', color: '#222' }}>
+            <div className="modal-content" style={{ width: 380, maxWidth: '90vw', color: '#222', position: 'relative' }}>
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
               <h2 style={{ color: '#111', fontSize: '1.05rem', marginBottom: 10 }}>Confirmar cancelación</h2>
               <p style={{ marginBottom: 16 }}>
                 ¿Seguro que deseas cancelar la cotización #{deleteTarget?.ID || deleteTarget?.id}? Esta acción no se puede deshacer.
@@ -933,44 +1282,107 @@ const Sells = () => {
           <div className="modal-overlay" onClick={() => setDetailsOpen(false)}>
             <div
               className="modal-content"
-              style={{ width: '70vw', maxWidth: 820, maxHeight: '80vh', overflowY: 'auto', color: '#111' }}
+              style={{ width: '80vw', maxWidth: 980, maxHeight: '82vh', overflowY: 'auto', color: '#111', position: 'relative' }}
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 style={{ fontSize: '1.2rem', marginBottom: 10 }}>Detalles de la cotización</h2>
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => setDetailsOpen(false)}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                <h2 style={{ fontSize: '1.2rem', marginBottom: 0 }}>Detalles de la cotización</h2>
+                {detailsData?.cotizacion && (
+                  <button
+                    className="add-btn"
+                    onClick={() => { const cot = detailsData.cotizacion; setDetailsOpen(false); openEditModal(cot); }}
+                    title="Editar esta cotización"
+                  >
+                    Editar esta cotización
+                  </button>
+                )}
+              </div>
               {detailsLoading ? (
                 <p>Cargando detalles…</p>
               ) : !detailsData ? (
                 <p>No se encontraron detalles.</p>
               ) : (
                 (() => {
-                  const d = detailsData || {};
-                  const cliente = d.Cliente || d.cliente || {};
-                  const usuario = d.Usuario || d.usuario || {};
-                  const fecha = d.fecha_creacion
-                    ? new Date(d.fecha_creacion).toLocaleString('es-MX')
-                    : (d.createdAt ? new Date(d.createdAt).toLocaleString('es-MX') : '');
-                  const anticipo = Number(d.anticipo || 0);
-                  const total = Number(d.total || d.importe || 0);
+                  const D = detailsData || {};
+                  const cot = D.cotizacion || D; // backend devuelve { cotizacion, productos }
+                  // Cliente con fallback a la lista si no viene anidado
+                  const cliente = (cot.Cliente || cot.cliente || cot.customer) || clientes.find(c => c.ID === (cot.ID_cliente || cot.id_cliente || cot.clienteId || cot.customerId)) || {};
+                  // Usuario/vendedor con fallback a un posible campo vendedor
+                  const usuario = (cot.Usuario || cot.usuario) || { nombre: cot.vendedor } || {};
+                  const fechaRaw = cot.fecha_creacion || cot.createdAt || cot.fecha || cot.fecha_venta || cot.fechaCotizacion;
+                  const fecha = fechaRaw ? new Date(fechaRaw).toLocaleString('es-MX') : '';
+                  const anticipo = Number(cot.anticipo ?? cot.advance ?? 0);
+                  const total = Number(cot.total ?? cot.importe ?? cot.monto ?? 0);
                   const resto = (total - anticipo).toFixed(2);
-                  const prods = d.productos || d.VentasProductos || [];
+                  const prods = D.productos || D.items || cot.VentasProductos || [];
+                  const telefono = cliente?.telefono || cliente?.tel || cliente?.phone || cliente?.celular || '-';
+                  const rfc = cliente?.rfc || cliente?.RFC || cliente?.rfc_cliente || '-';
+                  const statusText = ((cot.status || cot.estado || cot.estatus || '') + '').toString();
+                  const direccion = cliente?.direccion || [cliente?.calle, cliente?.colonia, cliente?.ciudad, cliente?.estado, cliente?.cp].filter(Boolean).join(', ');
+                  const idVenta = cot.ID || cot.id || cot.ID_venta || cot.ventaId || cot.cotizacionId || cot.folio || '';
                   return (
                     <div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 12 }}>
-                        <div><strong>ID:</strong> {d.ID || d.id}</div>
-                        <div><strong>Cliente:</strong> {cliente.nombre || '-'}</div>
-                        <div><strong>Vendedor:</strong> {usuario.nombre || '-'}</div>
-                        <div><strong>Fecha:</strong> {fecha || '-'}</div>
-                        <div>
-                          <strong>Estado:</strong>
-                          {d.status ? (
-                            <span style={{ marginLeft: 6 }} className={`status-badge status-${String(d.status).toLowerCase()}`}>{d.status}</span>
-                          ) : (
-                            ' -'
-                          )}
+                      <div className="details-grid">
+                        <div className="details-item">
+                          <div className="details-label">ID</div>
+                          <div className="details-value">{idVenta || '-'}</div>
                         </div>
-                        <div><strong>Anticipo:</strong> ${anticipo.toFixed(2)}</div>
-                        <div><strong>Total:</strong> ${total.toFixed(2)}</div>
-                        <div><strong>Resto:</strong> ${resto}</div>
+                        <div className="details-item">
+                          <div className="details-label">Cliente</div>
+                          <div className="details-value">{cliente?.nombre || cliente?.name || '-'}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Teléfono</div>
+                          <div className="details-value">{telefono}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">RFC</div>
+                          <div className="details-value">{rfc}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Dirección</div>
+                          <div className="details-value">{direccion || '-'}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Vendedor</div>
+                          <div className="details-value">{usuario?.nombre || usuario?.name || cot.vendedor || '-'}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Fecha</div>
+                          <div className="details-value">{fecha || '-'}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Estado</div>
+                          <div className="details-value">
+                            {statusText ? (
+                              <span className={`status-badge status-${statusText.toLowerCase()}`}>{statusText}</span>
+                            ) : (
+                              '-'
+                            )}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Anticipo</div>
+                          <div className="details-value">${anticipo.toFixed(2)}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Total</div>
+                          <div className="details-value">${total.toFixed(2)}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Resto</div>
+                          <div className="details-value">${resto}</div>
+                        </div>
                       </div>
                       <h3 style={{ marginTop: 12, marginBottom: 8, fontSize: '1.05rem' }}>Productos</h3>
                       {prods.length === 0 ? (
@@ -978,13 +1390,22 @@ const Sells = () => {
                       ) : (
                         <div className="products-list">
                           {prods.map((p, i) => {
-                            const prodMatch = productos.find((pr) => pr.ID === (p.productoId || p.ID_producto));
-                            const nombreProd = prodMatch?.nombre || p.Producto?.nombre || '';
+                            const prodMatch = productos.find((pr) => pr.ID === (p.productoId || p.ID_producto || p.idProducto || p.productId));
+                            const nombreProd = p.Producto?.nombre || prodMatch?.nombre || p.nombre || '';
+                            const imgUrl = prodMatch?.imagen || prodMatch?.image || prodMatch?.img || prodMatch?.foto || prodMatch?.foto_url || p.imagen || null;
+                            const medidas = p.medidas || p.tamano || '';
                             return (
                               <div key={`${i}-${p.productoId || p.ID_producto || 'prod'}`} className="product-card">
+                                <div className="product-card-header">Producto {i + 1}</div>
+                                {imgUrl ? (
+                                  <img src={imgUrl} alt={nombreProd || `Producto ${i+1}`} className="product-thumb" />
+                                ) : (
+                                  <div className="product-thumb product-thumb--placeholder">Sin imagen</div>
+                                )}
                                 <div className="product-grid">
                                   <div className="product-field"><label>Producto</label><div>{nombreProd}</div></div>
-                                  <div className="product-field"><label>Cantidad</label><div>{p.cantidad}</div></div>
+                                  <div className="product-field"><label>Cantidad</label><div>{p.cantidad ?? 1}</div></div>
+                                  <div className="product-field"><label>m²</label><div>{(p.total_m2 ?? '').toString() || '-'}</div></div>
                                   <div className="product-field"><label>Figura</label><div>{p.tipoFigura || '-'}</div></div>
                                   {p.tipoFigura === 'circulo' && (
                                     <div className="product-field"><label>Radio</label><div>{p.radio || '-'}</div></div>
@@ -1011,6 +1432,15 @@ const Sells = () => {
                                     <>
                                       <div className="product-field"><label>Cubierta Base</label><div>{p.cubierta_base || '-'}</div></div>
                                       <div className="product-field"><label>Cubierta Altura</label><div>{p.cubierta_altura || '-'}</div></div>
+                                    </>
+                                  )}
+                                  {!!medidas && (
+                                    <div className="product-field product-field--full"><label>Medidas</label><div>{medidas}</div></div>
+                                  )}
+                                  {('ancho' in p || 'largo' in p) && (
+                                    <>
+                                      {'ancho' in p && <div className="product-field"><label>Ancho</label><div>{p.ancho || '-'}</div></div>}
+                                      {'largo' in p && <div className="product-field"><label>Largo</label><div>{p.largo || '-'}</div></div>}
                                     </>
                                   )}
                                   {'descripcion' in p && (

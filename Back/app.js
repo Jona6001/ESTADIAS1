@@ -28,8 +28,8 @@ app.use(ventasRoutes);
 async function initializeApp() {
   try {
     await connectDB();
-    // Sincronizar modelos con la base de datos
-    await sequelize.sync({ force: false });
+  // Sincronizar modelos con la base de datos (actualiza esquemas automáticamente)
+  await sequelize.sync({ alter: true });
     console.log("Tablas sincronizadas correctamente");
     // Iniciar el servidor
     app.listen(PORT, () => {

@@ -6,6 +6,7 @@ const {
   obtenerOrdenes,
   obtenerOrdenPorId,
   actualizarStatusOrden,
+  actualizarOrden,
   actualizarAnticipo,
   calcularInventarioNecesario,
   confirmarInventario,
@@ -17,6 +18,7 @@ const {
 router.post("/api/ordenes", validarToken, crearOrden);
 router.get("/api/ordenes", validarToken, obtenerOrdenes);
 router.get("/api/ordenes/:id", validarToken, obtenerOrdenPorId);
+router.put("/api/ordenes/:id", validarToken, actualizarOrden);
 router.patch("/api/ordenes/:id/status", validarToken, actualizarStatusOrden);
 router.patch("/api/ordenes/:id/anticipo", validarToken, actualizarAnticipo);
 
