@@ -48,7 +48,9 @@
 .modal-btn-row .cancel-btn:hover {
   background: #ccc;
 }
-/* === INVENTARIO: ESTILOS ESPECÍFICOS === */
+
+/* PANTALLA DE INVENTARIO */
+
 .inventory-table {
   width: 100%;
   border-collapse: collapse;
@@ -1034,12 +1036,12 @@ main { padding-top: var(--navbar-offset); }
   position: fixed;
   top: 0;
   left: 0;
-  width: 220px;
+  width: 140px;
   height: auto;
   z-index: 10;
   background: #fff;
-  border-radius: 0 30px 30px 0;
-  padding: 2.5rem 2rem 2.5rem 0.7rem;
+  border-radius: 0 24px 24px 0;
+  padding: 1.2rem 1rem 1.2rem 0.6rem;
 }
 
 .login-container {
@@ -1052,11 +1054,11 @@ main { padding-top: var(--navbar-offset); }
 
 .login-form {
   background: #fff;
-  padding: 2.2rem 1.7rem;
+  padding: 1.6rem 1.2rem;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-  min-width: 320px;
-  max-width: 350px;
+  min-width: 280px;
+  max-width: 320px;
   width: 100%;
   border: 1px solid #e0e0e0;
 }
@@ -1065,7 +1067,7 @@ main { padding-top: var(--navbar-offset); }
   margin-bottom: 2rem;
   text-align: center;
   color: #7b1531; /* ✅ guinda */
-  font-size: 2rem;
+  font-size: 1.6rem;
 }
 
 .form-group {
@@ -1131,7 +1133,89 @@ input:-webkit-autofill:active {
   text-align: initial;
 }
 
+/* Usuarios: contenedor unificado para acercar tablas hacia arriba */
+.users-container {
+  padding: 24px;
+  padding-top: calc(var(--navbar-offset) + 2px);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Ajustes responsive para login */
+@media (max-width: 768px) {
+  .login-logo {
+    width: 110px;
+    padding: 0.8rem 0.7rem 0.8rem 0.5rem;
+    border-radius: 0 18px 18px 0;
+  }
+  .login-form {
+    max-width: 300px;
+    padding: 1.2rem 1rem;
+  }
+}
+
 /* (bloque .login-logo ya definido arriba, se elimina duplicado) */
+
+/* === TABLAS DE COTIZACIONES Y VENTAS === */
+.cotizaciones-table,
+.ventas-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  color: #111; /* asegurar contraste sobre fondo blanco */
+}
+
+.cotizaciones-table th,
+.cotizaciones-table td,
+.ventas-table th,
+.ventas-table td {
+  border: 1px solid #e5e5e5;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  color: #111; /* texto oscuro */
+}
+
+.cotizaciones-table thead th,
+.ventas-table thead th {
+  background: #f6f6f6;
+  color: #222;
+  font-weight: 700;
+}
+
+.cotizaciones-table tbody tr:nth-child(even),
+.ventas-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* Botones de acciones dentro de tablas: visibles en fondo claro */
+.edit-btn,
+.delete-btn,
+.ventas-btn,
+.open-add-modal-btn,
+.add-btn,
+.cancel-btn {
+  color: #fff;
+  background: #7b1531;
+  border: 1px solid #6a0f28;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.edit-btn { background: #2d7ef7; border-color: #1f63c5; }
+.delete-btn { background: #d7263d; border-color: #b11f32; }
+.ventas-btn { background: #2bb673; border-color: #22945d; }
+.open-add-modal-btn { background: #7b1531; border-color: #5b0f24; }
+.add-btn { background: #2bb673; border-color: #22945d; }
+.cancel-btn { background: #888; border-color: #777; }
+
+.edit-btn:hover { filter: brightness(1.05); }
+.delete-btn:hover { filter: brightness(1.05); }
+.ventas-btn:hover { filter: brightness(1.05); }
+.open-add-modal-btn:hover { filter: brightness(1.05); }
+.add-btn:hover { filter: brightness(1.05); }
+.cancel-btn:hover { filter: brightness(1.05); }
 
 .login-logo img {
   width: 220px;
@@ -1666,5 +1750,246 @@ input:-webkit-autofill:active {
 }
 
 
-/* Pantalla de inventario */
+/* Pantalla de ventas*/
+
+.ventas-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 5rem;
+}
+
+.ventas-section {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(123,21,49,0.08);
+  margin-bottom: 2.5rem;
+  padding: 2rem 1.5rem 1.5rem 1.5rem;
+}
+
+.ventas-section h2 {
+  color: #a30015;
+  margin-bottom: 1.2rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.ventas-table, .cotizaciones-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  background: #faf7f7;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 8px rgba(123,21,49,0.06);
+}
+
+.ventas-table th, .cotizaciones-table th {
+  background: #a30015;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.85rem 0.6rem;
+  text-align: left;
+  font-size: 1rem;
+}
+.ventas-table td, .cotizaciones-table td {
+  padding: 0.7rem 0.6rem;
+  border-bottom: 1px solid #f0e6e6;
+  font-size: 0.98rem;
+}
+.ventas-table tr:last-child td, .cotizaciones-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ventas-table tbody tr:hover, .cotizaciones-table tbody tr:hover {
+  background: #fbeaec;
+  transition: background 0.2s;
+}
+
+.ventas-btn, .cotizaciones-btn {
+  background: #a30015;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 1.1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 0.5rem;
+  transition: background 0.2s;
+}
+.ventas-btn:hover, .cotizaciones-btn:hover {
+  background: #7b1531;
+}
+
+.ventas-form, .cotizaciones-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem 2.5rem;
+  margin-bottom: 1.2rem;
+}
+.ventas-form label, .cotizaciones-form label {
+  font-weight: 500;
+  color: #7b1531;
+  margin-bottom: 0.3rem;
+  display: block;
+}
+.ventas-form input, .ventas-form select, .cotizaciones-form input, .cotizaciones-form select {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #e0cfd0;
+  border-radius: 5px;
+  font-size: 1rem;
+  background: #fff;
+  margin-bottom: 0.5rem;
+}
+.ventas-form input:focus, .ventas-form select:focus, .cotizaciones-form input:focus, .cotizaciones-form select:focus {
+  outline: 2px solid #a30015;
+  border-color: #a30015;
+}
+
+/* Modal ventas/cotizaciones */
+.ventas-modal-overlay, .cotizaciones-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.18);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ventas-modal-content, .cotizaciones-modal-content {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.18);
+  padding: 2.2rem 2.2rem 1.5rem 2.2rem;
+  max-width: 480px;
+  width: 95vw;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.ventas-modal-close, .cotizaciones-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #a30015;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .ventas-form, .cotizaciones-form {
+    grid-template-columns: 1fr;
+  }
+  .ventas-section, .ventas-container {
+    padding: 1.2rem 0.5rem;
+  }
+}
+
+
+/* === Productos en formularios: tarjetas apiladas y grid responsivo === */
+.products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.product-card {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+  padding: 10px 12px;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 8px 10px;
+}
+
+.product-field { grid-column: span 4; display: flex; flex-direction: column; gap: 4px; }
+.product-field label { font-size: 0.86rem; color: #7b1531; font-weight: 600; }
+.product-field--full { grid-column: 1 / -1; }
+
+@media (max-width: 900px) {
+  .product-field { grid-column: span 6; }
+}
+@media (max-width: 600px) {
+  .product-field { grid-column: 1 / -1; }
+}
+
+.product-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* === Badges de estado (pagado/pendiente/cancelado) === */
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+.status-pagado {
+  background: #e6f7ea;
+  color: #0a7a2a;
+  border: 1px solid #0a7a2a;
+}
+.status-pendiente {
+  background: #fff8e1;
+  color: #a15b00;
+  border: 1px solid #a15b00;
+}
+.status-cancelado {
+  background: #fde8eb;
+  color: #a30015;
+  border: 1px solid #a30015;
+}
+
+/* Badges para entidades con estado Activo/Desactivado */
+.status-activo {
+  background: #e6f7ea;
+  color: #0a7a2a;
+  border: 1px solid #0a7a2a;
+}
+.status-desactivado {
+  background: #fde8eb;
+  color: #a30015;
+  border: 1px solid #a30015;
+}
+
+
+
+/* Botón para limpiar filtros en barras de búsqueda */
+.users-filter-clear-btn {
+  margin-left: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #eef1f4;
+  color: #333;
+  border: 1px solid #ccd3db;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+}
+
+.users-filter-clear-btn:hover {
+  background: #e3e8ee;
+  border-color: #c0c8d2;
+}
+
+
 

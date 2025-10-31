@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
+import "../App.css";
 import { useNavigate, useLocation } from "react-router-dom";
-import { FaUser, FaUserCog, FaEdit, FaTrashAlt, FaSave, FaPlus, FaSearch, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
+import { FaUser, FaUserCog, FaEdit, FaTrashAlt, FaSave, FaPlus, FaSearch, FaCheckCircle, FaTimesCircle, FaTimes } from "react-icons/fa";
 
 const Users = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -88,7 +89,7 @@ const Users = () => {
       if (!res.ok) throw new Error("Error al obtener usuarios");
       const data = await res.json();
       setUsers(data.usuarios || []);
-    } catch (err) {
+    } catch {
       setUsers([]);
       setErrorMsg("No se pudo cargar usuarios");
     }
@@ -467,14 +468,22 @@ const Users = () => {
           className="users-table-filter-input"
         />
       )}
+      <button
+        type="button"
+        className="users-filter-clear-btn"
+        onClick={() => { setFilter(""); setCurrentPage(1); }}
+        title="Limpiar filtro"
+      >
+        <FaTimes /> Limpiar
+      </button>
     </div>
 
-        {/* Tabla de usuarios */}
-        <table className="users-table">
+        {/* Tabla de usuarios (estilo unificado) */}
+        <table className="cotizaciones-table">
           <thead>
             <tr>
               <th>ID</th>
-              <th>Usuario</th>
+              <th>Nombre</th>
               <th>Email</th>
               <th>Teléfono</th>
               <th>Rol</th>
@@ -485,7 +494,7 @@ const Users = () => {
           </thead>
           <tbody>
             {paginatedUsers.length === 0 ? (
-              <tr><td colSpan="7">No hay usuarios registrados</td></tr>
+              <tr><td colSpan="8">No hay usuarios registrados</td></tr>
             ) : (
               paginatedUsers.map(user => (
                 <tr key={user.ID}>
@@ -495,11 +504,9 @@ const Users = () => {
                   <td>{user.telefono || "-"}</td>
                   <td>{user.rol}</td>
                   <td>
-                    {user.status === false ? (
-                      <span style={{ color: "#d90429", fontWeight: "bold" }}>Desactivado</span>
-                    ) : (
-                      <span style={{ color: "#2ecc40", fontWeight: "bold" }}>Activo</span>
-                    )}
+                    <span className={`status-badge ${user.status ? 'status-activo' : 'status-cancelado status-desactivado'}`}>
+                      {user.status ? 'Activo' : 'Desactivado'}
+                    </span>
                   </td>
                   <td>{user.fecha_creacion ? new Date(user.fecha_creacion).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}</td>
                   <td>

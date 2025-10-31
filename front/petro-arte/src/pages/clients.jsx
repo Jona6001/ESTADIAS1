@@ -21,6 +21,9 @@ const Clients = () => {
   const [form, setForm] = useState(initialForm);
   const [editId, setEditId] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  // Filtro
+  const [filterText, setFilterText] = useState("");
+  const [filterField, setFilterField] = useState("nombre");
   const menuRef = useRef();
   const navigate = useNavigate();
   const location = useLocation();
@@ -271,14 +274,58 @@ const Clients = () => {
       </nav>
 
       {/* Contenido principal: tabla de clientes */}
-      <div style={{ padding: 40, maxWidth: 1100, margin: "0 auto" }}>
+  <div style={{ padding: 24, paddingTop: 'calc(var(--navbar-offset) + 2px)', maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 18 }}>
           <button className="add-btn" onClick={openAddModal}>
             <FaPlus style={{ marginRight: 6 }} /> Nuevo Cliente
           </button>
         </div>
         <div style={{ overflowX: "auto" }}>
-          <table className="users-table">
+          {/* Barra de filtros (estilo de Usuarios) */}
+          <div className="users-table-filter-row users-table-filter-row-attached" style={{ margin: "0 0 6px 0" }}>
+            <div className="users-filter-title">Filtrar por:</div>
+            <select
+              className="users-table-filter-select"
+              value={filterField}
+              onChange={(e) => {
+                setFilterField(e.target.value);
+                setFilterText("");
+              }}
+            >
+              <option value="nombre">Nombre</option>
+              <option value="telefono">Teléfono</option>
+              <option value="rfc">RFC</option>
+              <option value="direccion">Dirección</option>
+              <option value="status">Status</option>
+            </select>
+            {filterField === 'status' ? (
+              <select
+                className="users-table-filter-input"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="activo">Activo</option>
+                <option value="desactivado">Desactivado</option>
+              </select>
+            ) : (
+              <input
+                className="users-table-filter-input"
+                placeholder="Escribe para filtrar…"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+              />
+            )}
+            <button
+              type="button"
+              className="users-filter-clear-btn"
+              onClick={() => setFilterText("")}
+              title="Limpiar filtro"
+            >
+              <FaTimes /> Limpiar
+            </button>
+          </div>
+          <table className="cotizaciones-table">
             <thead>
               <tr>
                 <th>Nombre</th>
@@ -292,23 +339,46 @@ const Clients = () => {
             <tbody>
               {loading ? (
                 <tr><td colSpan="6">Cargando...</td></tr>
-              ) : clientes.length === 0 ? (
-                <tr><td colSpan="6">No hay clientes registrados</td></tr>
-              ) : (
-                clientes.map(cliente => (
-                  <tr key={cliente.id} style={cliente.status === false ? { opacity: 0.5, background: "#fde8eb" } : {}}>
+              ) : (() => {
+                const filtered = clientes.filter((cliente) => {
+                  const q = (filterText || '').toLowerCase().trim();
+                  if (!q) return true;
+                  switch (filterField) {
+                    case 'nombre':
+                      return (cliente.nombre || '').toLowerCase().includes(q);
+                    case 'telefono':
+                      return (cliente.telefono || '').includes(q);
+                    case 'rfc':
+                      return (cliente.rfc || '').toLowerCase().includes(q);
+                    case 'direccion':
+                      return (cliente.direccion || '').toLowerCase().includes(q);
+                    case 'status':
+                      return ((cliente.status ? 'activo' : 'desactivado')).includes(q);
+                    default:
+                      return true;
+                  }
+                });
+                if (filtered.length === 0) {
+                  return <tr><td colSpan="6">No hay clientes registrados</td></tr>;
+                }
+                return filtered.map((cliente) => (
+                  <tr key={cliente.id} style={cliente.status === false ? { opacity: 0.5, background: '#fde8eb' } : {}}>
                     <td>{cliente.nombre}</td>
                     <td>{cliente.telefono}</td>
-                    <td>{cliente.rfc || "-"}</td>
+                    <td>{cliente.rfc || '-'}</td>
                     <td>{cliente.direccion}</td>
-                    <td>{cliente.status ? "Activo" : "Desactivado"}</td>
+                    <td>
+                      <span className={`status-badge ${cliente.status ? 'status-activo' : 'status-cancelado status-desactivado'}`}> 
+                        {cliente.status ? 'Activo' : 'Desactivado'}
+                      </span>
+                    </td>
                     <td>
                       <button className="edit-btn" title="Editar" onClick={() => openEditModal(cliente)}><FaEdit /></button>
                       <button className="delete-btn" title="Desactivar" onClick={() => handleDelete(cliente.id)} disabled={!cliente.status}><FaTrash /></button>
                     </td>
                   </tr>
-                ))
-              )}
+                ));
+              })()}
             </tbody>
           </table>
         </div>

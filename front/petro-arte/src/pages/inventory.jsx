@@ -30,6 +30,9 @@ const Inventory = () => {
 		const [errorMsg, setErrorMsg] = useState("");
 		const [reactivateId, setReactivateId] = useState(null);
 		const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+	    // Filtro
+	    const [filterText, setFilterText] = useState("");
+	    const [filterField, setFilterField] = useState("nombre");
 	const menuRef = useRef();
 	const navigate = useNavigate();
 
@@ -308,7 +311,7 @@ const Inventory = () => {
 		  </div>
 		</nav>
 
-			<div style={{ padding: 40, maxWidth: 1100, margin: "0 auto" }}>
+			<div style={{ padding: 24, paddingTop: 'calc(var(--navbar-offset) + 2px)', maxWidth: 1100, margin: "0 auto" }}>
 				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 30 }}>
 					<button className="open-add-modal-btn" onClick={openAddModal}>
 						<FaPlus style={{ marginRight: 8 }} /> Nuevo Producto
@@ -331,7 +334,25 @@ const Inventory = () => {
 							</tr>
 						);
 					} else {
-						tableRows = productos.map(producto => (
+						const filtered = productos.filter((producto) => {
+														const q = (filterText || '').toLowerCase().trim();
+														if (!q) return true;
+														switch (filterField) {
+															case 'id':
+																return String(producto.ID || producto.id || '').includes(q);
+															case 'nombre':
+																return (producto.nombre || '').toLowerCase().includes(q);
+															case 'descripcion':
+																return (producto.descripcion || '').toLowerCase().includes(q);
+															case 'status': {
+																const statusText = producto.status ? 'activo' : 'desactivado';
+																return statusText.includes(q);
+															}
+															default:
+																return true;
+														}
+													});
+						tableRows = filtered.map(producto => (
 							<tr
 								key={producto.ID || producto.id}
 								className={producto.status ? "" : "inactive-row"}
@@ -364,9 +385,11 @@ const Inventory = () => {
 										? new Date(producto.fecha_creacion).toLocaleDateString()
 										: ""}
 								</td>
-								<td>
-									{/* Estado eliminado */}
-								</td>
+																<td>
+																	<span className={`status-badge ${producto.status ? 'status-activo' : 'status-cancelado status-desactivado'}`}>
+																		{producto.status ? 'Activo' : 'Desactivado'}
+																	</span>
+																</td>
 								<td style={{ minWidth: 120 }}>
 									<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
 										<button
@@ -404,7 +427,50 @@ const Inventory = () => {
 					}
 					return (
 						<div style={{ overflowX: "auto" }}>
-							<table className="users-table">
+                            {/* Barra de filtros */}
+														<div className="users-table-filter-row users-table-filter-row-attached" style={{ margin: "0 0 6px 0" }}>
+                              <div className="users-filter-title">Filtrar por:</div>
+															<select
+																className="users-table-filter-select"
+																value={filterField}
+																onChange={(e) => {
+																	setFilterField(e.target.value);
+																	setFilterText("");
+																}}
+															>
+																<option value="id">ID</option>
+																<option value="nombre">Nombre</option>
+																<option value="descripcion">Descripción</option>
+																<option value="status">Status</option>
+															</select>
+															{filterField === 'status' ? (
+																<select
+																	className="users-table-filter-input"
+																	value={filterText}
+																	onChange={(e) => setFilterText(e.target.value)}
+																>
+																	<option value="">Todos</option>
+																	<option value="activo">Activo</option>
+																	<option value="desactivado">Desactivado</option>
+																</select>
+															) : (
+																<input
+																	className="users-table-filter-input"
+																	placeholder="Escribe para filtrar…"
+																	value={filterText}
+																	onChange={(e) => setFilterText(e.target.value)}
+																/>
+															)}
+															<button
+															  type="button"
+															  className="users-filter-clear-btn"
+															  onClick={() => setFilterText("")}
+															  title="Limpiar filtro"
+															>
+															  <FaTimes /> Limpiar
+															</button>
+                            </div>
+							<table className="cotizaciones-table">
 								<thead>
 									<tr>
 										<th>ID</th>
