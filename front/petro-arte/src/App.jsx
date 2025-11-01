@@ -6,6 +6,7 @@ import Sells from "./pages/sells";
 import Users from "./pages/users";
 import Config from "./pages/config";
 import Inventory from "./pages/inventory";
+import Residuos from "./pages/residuos";
 
 function App() {
   return (
@@ -16,7 +17,8 @@ function App() {
       <Route path="/ventas" element={<Sells />} />
       <Route path="/usuarios" element={<Users />} />
       <Route path="/config" element={<Config />} />
-      <Route path="/inventario" element={<Inventory />} />
+  <Route path="/inventario" element={<Inventory />} />
+  <Route path="/residuos" element={<Residuos />} />
 
     </Routes>
   );

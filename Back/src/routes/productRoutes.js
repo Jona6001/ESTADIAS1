@@ -4,7 +4,6 @@ const {
   crearProducto,
   modificarProducto,
   eliminarProducto,
-  reactivarProducto,
   buscarProducto,
   listarProductos,
 } = require("../controllers/productosController");
@@ -16,11 +15,8 @@ router.post("/productos", validarToken, crearProducto);
 // Modificar producto (solo admin)
 router.patch("/productos/:id", validarToken, modificarProducto);
 
-// Eliminar producto (soft delete, solo admin)
-router.patch("/productos/:id/desactivar", validarToken, eliminarProducto);
-
-// Reactivar producto (solo admin)
-router.patch("/productos/:id/reactivar", validarToken, reactivarProducto);
+// Eliminar producto permanentemente (solo admin)
+router.delete("/productos/:id", validarToken, eliminarProducto);
 
 // Obtener producto por ID (autenticado)
 router.get("/productos/:id", validarToken, buscarProducto);

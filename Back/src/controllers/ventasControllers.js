@@ -403,6 +403,12 @@ const actualizarAnticipo = async (req, res) => {
 };
 
 // Actualizar una orden completa (cliente, productos, anticipo y/o status)
+// Además: ajusta inventario por DIFERENCIAS cuando cambia el contenido de la orden.
+// Regla:
+// - Si aumentan los m2 (por producto), se descuentan las piezas adicionales necesarias del inventario
+//   y se registra un Residuo por esa diferencia (si aplica residuo > 0). 
+// - Si disminuyen los m2 (por producto), se regresan las piezas completas sobrantes al inventario.
+//   (No se modifican registros de residuos históricos).
 const actualizarOrden = async (req, res) => {
   try {
     const { id } = req.params;
@@ -413,6 +419,15 @@ const actualizarOrden = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `No se encontró la orden con ID: ${id}`,
+      });
+    }
+
+    // Bloquear cambios de productos si la orden no está 'pendiente'
+    if (orden.status !== "pendiente" && req.body.productos !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "No se pueden modificar productos en una orden que no está 'pendiente'. Duplique la cotización para continuar.",
       });
     }
 
@@ -428,7 +443,7 @@ const actualizarOrden = async (req, res) => {
       orden.ID_cliente = ID_cliente;
     }
 
-    // Reemplazar productos si se envían
+  // Reemplazar productos si se envían
     if (productos !== undefined) {
       if (!Array.isArray(productos) || productos.length === 0) {
         return res.status(400).json({
@@ -437,12 +452,19 @@ const actualizarOrden = async (req, res) => {
         });
       }
 
-      // Borrar productos actuales
-      await VentasProductos.destroy({ where: { cotizacionId: id } });
+      // 1) Calcular diferencias contra los productos actuales de la orden
+      //    a) Cargar productos actuales y sumar m2 por productoId
+      const actuales = await VentasProductos.findAll({ where: { cotizacionId: id } });
+      const m2ActualPorProducto = new Map();
+      for (const vp of actuales) {
+        const key = vp.productoId;
+        m2ActualPorProducto.set(key, (m2ActualPorProducto.get(key) || 0) + Number(vp.total_m2 || 0));
+      }
 
+      //    b) Calcular m2 nuevos por productoId a partir del payload
+      const m2NuevoPorProducto = new Map();
+      const detalleNuevos = []; // preserva los cálculos para re-crear VP y total
       let totalCotizacion = 0;
-      const productosNuevos = [];
-
       for (const p of productos) {
         const {
           productoId,
@@ -474,7 +496,8 @@ const actualizarOrden = async (req, res) => {
           });
         }
 
-  let m2_por_pieza = 0;
+        // Calcular m2_por_pieza con mismas reglas que en creación
+        let m2_por_pieza = 0;
         if (tipoFigura === "circulo") {
           if (!radio) {
             return res.status(400).json({
@@ -514,17 +537,21 @@ const actualizarOrden = async (req, res) => {
           }
           m2_por_pieza += base * altura;
         }
-
         if (soclo_base && soclo_altura) m2_por_pieza += soclo_base * soclo_altura;
-        if (cubierta_base && cubierta_altura)
-          m2_por_pieza += cubierta_base * cubierta_altura;
+        if (cubierta_base && cubierta_altura) m2_por_pieza += cubierta_base * cubierta_altura;
 
         const total_m2 = m2_por_pieza * Number(cantidad || 1);
         const subtotal = total_m2 * productoExiste.cantidad_m2;
         totalCotizacion += subtotal;
 
-        const vp = await VentasProductos.create({
-          cotizacionId: id,
+        // Acumular por producto
+        m2NuevoPorProducto.set(
+          productoId,
+          (m2NuevoPorProducto.get(productoId) || 0) + Number(total_m2)
+        );
+
+        // Guardar detalle para re-crear VP luego
+        detalleNuevos.push({
           productoId,
           cantidad: Number(cantidad || 1),
           tipoFigura,
@@ -537,13 +564,113 @@ const actualizarOrden = async (req, res) => {
           soclo_altura: soclo_altura || null,
           cubierta_base: cubierta_base || null,
           cubierta_altura: cubierta_altura || null,
-          total_m2: parseFloat(total_m2.toFixed(4)),
+          total_m2: parseFloat(Number(total_m2).toFixed(4)),
           descripcion: descripcion || null,
+        });
+      }
+
+  // 2) Ajustar inventario por diferencias (delta de piezas por producto)
+      //    - Calculamos piezas = ceil(total_m2 / medida_por_unidad)
+  const ajustes = [];
+  let ajusteInventarioAplicado = false;
+      const productoCache = new Map();
+      const getProducto = async (idProd) => {
+        if (!productoCache.has(idProd)) {
+          const pr = await Producto.findByPk(idProd);
+          productoCache.set(idProd, pr);
+        }
+        return productoCache.get(idProd);
+      };
+
+      // Conjunto de todos los productos involucrados (antes y después)
+      const allProductoIds = new Set([
+        ...Array.from(m2ActualPorProducto.keys()),
+        ...Array.from(m2NuevoPorProducto.keys()),
+      ]);
+
+      for (const pid of allProductoIds) {
+        const prod = await getProducto(pid);
+        if (!prod) continue; // si el producto ya no existe, omitir
+        const m2Antes = Number(m2ActualPorProducto.get(pid) || 0);
+        const m2Despues = Number(m2NuevoPorProducto.get(pid) || 0);
+        const m2PorPieza = Number(prod.medida_por_unidad || 0);
+        if (m2PorPieza <= 0) continue;
+
+        const piezasAntes = Math.ceil(m2Antes / m2PorPieza);
+        const piezasDespues = Math.ceil(m2Despues / m2PorPieza);
+        const deltaPiezas = piezasDespues - piezasAntes;
+
+        if (deltaPiezas > 0) {
+          // Aumentan las piezas necesarias -> descontar del inventario
+          if (prod.cantidad_piezas < deltaPiezas) {
+            return res.status(400).json({
+              success: false,
+              message: `Inventario insuficiente para ${prod.nombre}. Se requieren ${deltaPiezas} piezas adicionales, disponibles ${prod.cantidad_piezas}`,
+            });
+          }
+
+          prod.cantidad_piezas -= deltaPiezas;
+          await prod.save();
+
+          ajustes.push({ productoId: pid, nombre: prod.nombre, deltaPiezas });
+          ajusteInventarioAplicado = true;
+
+          // Registrar Residuo por la diferencia (si hay residuo > 0)
+          // m2 adicionales requeridos vs piezas enteras usadas
+          const m2Adicionales = Math.max(0, m2Despues - m2Antes);
+          const m2Usados = deltaPiezas * m2PorPieza;
+          const residuoM2 = Math.max(0, m2Usados - m2Adicionales);
+          const porcentajeResiduo = m2PorPieza > 0 ? (residuoM2 / m2PorPieza) * 100 : 0;
+
+          if (residuoM2 > 0) {
+            try {
+              await Residuo.create({
+                cotizacionId: id,
+                productoId: pid,
+                piezas_usadas: deltaPiezas,
+                m2_necesarios: parseFloat(m2Adicionales.toFixed(4)),
+                m2_usados: parseFloat(m2Usados.toFixed(4)),
+                m2_residuo: parseFloat(residuoM2.toFixed(4)),
+                porcentaje_residuo: parseFloat(porcentajeResiduo.toFixed(2)),
+                medida_por_unidad: m2PorPieza,
+                estado: "disponible",
+                observaciones: "Ajuste por edición de orden",
+                fecha_creacion: new Date(),
+                ID_usuario_registro: req.usuario?.ID || null,
+              });
+            } catch (e) {
+              // Si falla el registro del residuo, no detenemos el flujo de actualización
+              console.error("No se pudo registrar residuo diferencial:", e.message);
+            }
+          }
+        } else if (deltaPiezas < 0) {
+          // Reducen las piezas necesarias -> regresar piezas sobrantes al inventario
+          const piezasARegresar = Math.abs(deltaPiezas);
+          prod.cantidad_piezas += piezasARegresar;
+          await prod.save();
+          ajustes.push({ productoId: pid, nombre: prod.nombre, deltaPiezas });
+          ajusteInventarioAplicado = true;
+          // Nota: no alteramos los residuos históricos
+        }
+      }
+
+      // 3) Borrar productos actuales y re-crear con la nueva definición
+      await VentasProductos.destroy({ where: { cotizacionId: id } });
+
+      const productosNuevos = [];
+      for (const det of detalleNuevos) {
+        const vp = await VentasProductos.create({
+          cotizacionId: id,
+          ...det,
         });
         productosNuevos.push(vp);
       }
 
       orden.total = parseFloat(totalCotizacion.toFixed(2));
+
+      // Guardar marca de ajuste en memoria de la request para retornarla
+      req._ajusteInventarioAplicado = ajusteInventarioAplicado;
+      req._ajustesResumen = ajustes;
     }
 
     // Actualizar anticipo si se envía
@@ -594,7 +721,12 @@ const actualizarOrden = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Orden actualizada exitosamente",
-      data: { cotizacion: ordenIncluida, productos: productosResp },
+      data: {
+        cotizacion: ordenIncluida,
+        productos: productosResp,
+        ajusteInventarioAplicado: Boolean(req._ajusteInventarioAplicado),
+        ajustes: Array.isArray(req._ajustesResumen) ? req._ajustesResumen : [],
+      },
     });
   } catch (error) {
     console.error("Error al actualizar la orden:", error);

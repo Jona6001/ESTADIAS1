@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../App.css";
 import { useNavigate, useLocation } from "react-router-dom";
-import { FaUser, FaBoxes, FaEdit, FaTrash, FaPlus, FaSave, FaTimes, FaCheck } from "react-icons/fa";
+import { FaUser, FaBoxes, FaEdit, FaTrash, FaPlus, FaSave, FaTimes } from "react-icons/fa";
 
 const API_URL = "http://localhost:3000/productos";
 
@@ -24,12 +24,12 @@ const Inventory = () => {
 	const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 		const [productos, setProductos] = useState([]);
 		const [loading, setLoading] = useState(true);
-		const [modalOpen, setModalOpen] = useState(null); // null, 'add', 'edit', 'reactivate'
+		const [modalOpen, setModalOpen] = useState(null); // null, 'add', 'edit'
 		const [form, setForm] = useState(initialForm);
 		const [editId, setEditId] = useState(null);
 		const [errorMsg, setErrorMsg] = useState("");
-		const [reactivateId, setReactivateId] = useState(null);
 		const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+		const [showSecondDeleteConfirm, setShowSecondDeleteConfirm] = useState(false);
 	    // Filtro
 	    const [filterText, setFilterText] = useState("");
 	    const [filterField, setFilterField] = useState("nombre");
@@ -105,10 +105,7 @@ const Inventory = () => {
 		setErrorMsg("");
 	};
 
-	const openReactivateModal = (producto) => {
-		setReactivateId(producto.ID || producto.id);
-		setModalOpen('reactivate');
-	};
+	// Reactivación eliminada: ya no se maneja estado de producto
 
 	const closeModal = () => {
 		setModalOpen(null);
@@ -184,36 +181,22 @@ const Inventory = () => {
 	const handleDelete = async (id) => {
 		const token = localStorage.getItem("token");
 		try {
-			const res = await fetch(`${API_URL}/${id}/desactivar`, {
-				method: "PATCH",
-				headers: { Authorization: `Bearer ${token}` },
-			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.mensaje || "Error al eliminar producto");
+				const res = await fetch(`${API_URL}/${id}`, {
+					method: "DELETE",
+					headers: { Authorization: `Bearer ${token}` },
+				});
+				const data = await res.json().catch(() => ({}));
+				if (!res.ok) throw new Error(data.mensaje || data.message || "Error al eliminar producto");
 			fetchProductos();
-			setDeleteConfirmId(null);
+				setDeleteConfirmId(null);
+				setShowSecondDeleteConfirm(false);
 		} catch (err) {
 			alert(err.message);
-			setDeleteConfirmId(null);
+				setDeleteConfirmId(null);
+				setShowSecondDeleteConfirm(false);
 		}
 	};
-
-	const handleReactivate = async () => {
-		const token = localStorage.getItem("token");
-		try {
-			const res = await fetch(`${API_URL}/${reactivateId}/reactivar`, {
-				method: "PATCH",
-				headers: { Authorization: `Bearer ${token}` },
-			});
-			const data = await res.json();
-			if (!res.ok) throw new Error(data.mensaje || "Error al reactivar producto");
-			fetchProductos();
-			setModalOpen(null);
-			setReactivateId(null);
-		} catch (err) {
-			alert(err.message);
-		}
-	};
+	// Reactivar eliminado
 
 	const handleLogout = () => {
 		setMenuOpen(false);
@@ -261,7 +244,7 @@ const Inventory = () => {
 			<button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
 			<button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
 			<button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
-			<button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+			  <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
 		      </div>
 		    </div>
 
@@ -271,7 +254,7 @@ const Inventory = () => {
 		      <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
 		      <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
 		      <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
-		      <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+			  <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
 		    </div>
 
 		    {/* Derecha: fecha/hora + usuario */}
@@ -316,6 +299,9 @@ const Inventory = () => {
 					<button className="open-add-modal-btn" onClick={openAddModal}>
 						<FaPlus style={{ marginRight: 8 }} /> Nuevo Producto
 					</button>
+					<button className="add-btn" onClick={() => navigate('/residuos')} title="Ver residuos disponibles">
+						Ver Residuos
+					</button>
 				</div>
 
 				{/* Tabla de productos */}
@@ -324,13 +310,13 @@ const Inventory = () => {
 					if (loading) {
 						tableRows = (
 							<tr>
-								<td colSpan="10">Cargando...</td>
+								<td colSpan="9">Cargando...</td>
 							</tr>
 						);
 					} else if (productos.length === 0) {
 						tableRows = (
 							<tr>
-								<td colSpan="10">No hay productos registrados</td>
+								<td colSpan="9">No hay productos registrados</td>
 							</tr>
 						);
 					} else {
@@ -344,10 +330,6 @@ const Inventory = () => {
 																return (producto.nombre || '').toLowerCase().includes(q);
 															case 'descripcion':
 																return (producto.descripcion || '').toLowerCase().includes(q);
-															case 'status': {
-																const statusText = producto.status ? 'activo' : 'desactivado';
-																return statusText.includes(q);
-															}
 															default:
 																return true;
 														}
@@ -355,7 +337,7 @@ const Inventory = () => {
 						tableRows = filtered.map(producto => (
 							<tr
 								key={producto.ID || producto.id}
-								className={producto.status ? "" : "inactive-row"}
+								className={""}
 							>
 								<td>{producto.ID || producto.id}</td>
 								<td>{producto.nombre}</td>
@@ -385,11 +367,6 @@ const Inventory = () => {
 										? new Date(producto.fecha_creacion).toLocaleDateString()
 										: ""}
 								</td>
-																<td>
-																	<span className={`status-badge ${producto.status ? 'status-activo' : 'status-cancelado status-desactivado'}`}>
-																		{producto.status ? 'Activo' : 'Desactivado'}
-																	</span>
-																</td>
 								<td style={{ minWidth: 120 }}>
 									<div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
 										<button
@@ -407,15 +384,27 @@ const Inventory = () => {
 										>
 											<FaTrash />
 										</button>
-{/* Modal de confirmación de eliminación de producto */}
-{deleteConfirmId && (
+{/* Modales de doble confirmación de eliminación */}
+{deleteConfirmId && !showSecondDeleteConfirm && (
 	<div className="modal-overlay">
-		<div className="modal-content" style={{ maxWidth: 340, textAlign: 'center' }}>
-			<h2 style={{ color: '#a30015', fontWeight: 800, fontSize: '1.15rem', marginBottom: 18 }}>¿Eliminar producto?</h2>
-			<p style={{ color: '#7b1531', marginBottom: 22, fontWeight: 600 }}>¿Estás seguro de que deseas eliminar este producto? Esta acción no se puede deshacer.</p>
+		<div className="modal-content" style={{ maxWidth: 360, textAlign: 'center' }}>
+			<h2 style={{ color: '#a30015', fontWeight: 800, fontSize: '1.1rem', marginBottom: 14 }}>¿Eliminar producto?</h2>
+			<p style={{ color: '#7b1531', marginBottom: 18, fontWeight: 600 }}>Esta acción no se puede deshacer.</p>
+			<div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+				<button className="delete-btn" style={{ minWidth: 90 }} onClick={() => setShowSecondDeleteConfirm(true)}>Continuar</button>
+				<button className="cancel-btn" style={{ minWidth: 90 }} onClick={() => setDeleteConfirmId(null)}>Cancelar</button>
+			</div>
+		</div>
+	</div>
+)}
+{deleteConfirmId && showSecondDeleteConfirm && (
+	<div className="modal-overlay">
+		<div className="modal-content" style={{ maxWidth: 380, textAlign: 'center' }}>
+			<h2 style={{ color: '#a30015', fontWeight: 800, fontSize: '1.1rem', marginBottom: 14 }}>Confirmar eliminación permanente</h2>
+			<p style={{ color: '#7b1531', marginBottom: 18, fontWeight: 600 }}>Se eliminará el producto de forma permanente. ¿Deseas continuar?</p>
 			<div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
 				<button className="delete-btn" style={{ minWidth: 90 }} onClick={() => handleDelete(deleteConfirmId)}>Eliminar</button>
-				<button className="cancel-btn" style={{ minWidth: 90 }} onClick={() => setDeleteConfirmId(null)}>Cancelar</button>
+				<button className="cancel-btn" style={{ minWidth: 90 }} onClick={() => { setDeleteConfirmId(null); setShowSecondDeleteConfirm(false); }}>Cancelar</button>
 			</div>
 		</div>
 	</div>
@@ -441,26 +430,15 @@ const Inventory = () => {
 																<option value="id">ID</option>
 																<option value="nombre">Nombre</option>
 																<option value="descripcion">Descripción</option>
-																<option value="status">Status</option>
 															</select>
-															{filterField === 'status' ? (
-																<select
-																	className="users-table-filter-input"
-																	value={filterText}
-																	onChange={(e) => setFilterText(e.target.value)}
-																>
-																	<option value="">Todos</option>
-																	<option value="activo">Activo</option>
-																	<option value="desactivado">Desactivado</option>
-																</select>
-															) : (
+															{
 																<input
 																	className="users-table-filter-input"
 																	placeholder="Escribe para filtrar…"
 																	value={filterText}
 																	onChange={(e) => setFilterText(e.target.value)}
 																/>
-															)}
+															}
 															<button
 															  type="button"
 															  className="users-filter-clear-btn"
@@ -481,7 +459,6 @@ const Inventory = () => {
 										<th>Medida/unidad</th>
 										<th>Cant. m2</th>
 										<th>Fecha creación</th>
-										<th>Estado</th>
 										<th>Acciones</th>
 									</tr>
 								</thead>
@@ -577,18 +554,7 @@ const Inventory = () => {
 							</div>
 						)}
 
-						{modalOpen === 'reactivate' && (
-							<div className="modal-overlay">
-								<div className="modal-content" style={{ maxWidth: 340, textAlign: 'center' }}>
-									<h2 style={{ color: '#a30015', fontWeight: 800, fontSize: '1.15rem', marginBottom: 18 }}>¿Reactivar producto?</h2>
-									<p style={{ color: '#7b1531', marginBottom: 22, fontWeight: 600 }}>¿Estás seguro de que deseas reactivar este producto?</p>
-									<div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-										<button className="reactivate-btn" style={{ minWidth: 90 }} onClick={handleReactivate}>Reactivar</button>
-										<button className="cancel-btn" style={{ minWidth: 90 }} onClick={closeModal}>Cancelar</button>
-									</div>
-								</div>
-							</div>
-						)}
+						{/* Reactivar eliminado */}
 			</div>
 		</div>
 	);

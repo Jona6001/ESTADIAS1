@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../App.css";
 import { useNavigate, useLocation } from "react-router-dom";
-import { FaUser, FaMoneyCheckAlt, FaEdit, FaTrash, FaPlus, FaSave, FaTimes, FaEye } from "react-icons/fa";
+import { FaUser, FaMoneyCheckAlt, FaEdit, FaTrash, FaPlus, FaSave, FaTimes, FaEye, FaCopy, FaFilePdf } from "react-icons/fa";
 
 // Endpoints
 const API_COTIZACIONES = "http://localhost:3000/api/ordenes";
@@ -42,6 +42,13 @@ const Sells = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsData, setDetailsData] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  // Marca de último ajuste por cotización para mostrar badge en detalles
+  const [adjustFlags, setAdjustFlags] = useState({});
+  // Guardar último resumen de ajustes para mostrarlo
+  const [adjustSummaries, setAdjustSummaries] = useState({});
+  // Resumen de confirmación de inventario (piezas descontadas)
+  const [confirmSummaryOpen, setConfirmSummaryOpen] = useState(false);
+  const [confirmSummary, setConfirmSummary] = useState(null);
   // Filtro de cotizaciones
   const [cotFilterText, setCotFilterText] = useState("");
   const [cotFilterField, setCotFilterField] = useState("cliente");
@@ -149,9 +156,70 @@ const Sells = () => {
     setErrorMsg("");
   };
 
-  const openConfirmVenta = (cot) => {
-    setVentaResumen(cot);
-    setModalOpen("confirmVenta");
+  // Foco inteligente por mensaje de error del backend
+  const focusAccordingToError = (msg) => {
+    const m = (msg || '').toLowerCase();
+    // Anticipo
+    if (m.includes('anticipo')) {
+      const el = document.getElementById('anticipo-input');
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+      return;
+    }
+    // Cliente
+    if (m.includes('cliente')) {
+      const el = document.getElementById('cliente-select');
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+      return;
+    }
+    // Inventario insuficiente / producto
+    if (m.includes('inventario') || m.includes('producto')) {
+      const el = document.getElementById('prod-0-productoId') || document.querySelector('[id^="prod-"][id$="-productoId"]');
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+      return;
+    }
+    // Fallback: al inicio del modal
+    const modal = document.querySelector('.modal-content.compact') || document.querySelector('.modal-content');
+    if (modal) modal.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openConfirmVenta = async (cot) => {
+    setErrorMsg("");
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_COTIZACIONES}/${cot.ID || cot.id}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      const txt = await res.text();
+      let data; try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
+      if (!res.ok || data?.success === false) throw new Error(data?.message || "No se pudo cargar la orden");
+      const payload = data.data || data;
+      const ord = payload.cotizacion || payload;
+      const prods = Array.isArray(payload.productos) ? payload.productos : [];
+
+      const total = Number(ord.total || 0);
+      const anticipo = Number(ord.anticipo || 0);
+      const resto = Number((total - anticipo).toFixed(2));
+      const vendedor = (ord.Usuario?.nombre || ord.usuario?.nombre || cot.Usuario?.nombre || cot.usuario?.nombre || "-");
+      const productosNorm = prods.map((p) => ({
+        productoId: p.productoId || p.ID_producto || p.Producto?.ID || p.producto?.ID,
+        cantidad: p.cantidad,
+        tipoFigura: p.tipoFigura || p.tipo_figura || p.figura,
+        medidas: p.medidas || p.medida || p.medida_custom,
+      })).filter(x => x.productoId);
+
+      setVentaResumen({
+        ID: ord.ID || ord.id,
+        ID_cliente: ord.ID_cliente,
+        total,
+        anticipo,
+        resto,
+        vendedor,
+        productos: productosNorm,
+      });
+      setModalOpen("confirmVenta");
+    } catch (e) {
+      setErrorMsg(e.message || "No se pudo abrir el modal de venta");
+    }
   };
 
   const openDetails = async (cot) => {
@@ -177,6 +245,10 @@ const Sells = () => {
   const [editTarget, setEditTarget] = useState(null);
 
   const openEditModal = async (cot) => {
+    if ((cot.status || '').toLowerCase() !== 'pendiente') {
+      setErrorMsg('Esta cotización no se puede editar porque no está PENDIENTE. Usa "Duplicar" para generar una nueva.');
+      return;
+    }
     // Abrir modal con datos base
     setEditTarget(cot);
     setModalOpen("edit");
@@ -417,27 +489,14 @@ const Sells = () => {
 
       const txt = await res.text();
       let data;
-      try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
-      if (!res.ok || data?.success === false) {
-        throw new Error(data?.message || data?.error || "Error al crear cotización");
+      try { data = JSON.parse(txt); } catch {
+        data = { success: false, message: txt && txt.trim().startsWith('<') ? 'El servidor respondió con un error (HTML). Intenta más tarde.' : txt };
       }
-
-      // Intentar descontar inventario automáticamente (si cumple condiciones)
-      const newId = data?.data?.cotizacion?.ID || data?.cotizacion?.ID;
-      if (newId) {
-        try {
-          const resCalc = await fetch(`${API_COTIZACIONES}/${newId}/calcular-inventario`, { headers: { Authorization: `Bearer ${token}` } });
-          const txtCalc = await resCalc.text();
-          let dCalc; try { dCalc = JSON.parse(txtCalc); } catch { dCalc = { success: false, message: txtCalc }; }
-          if (resCalc.ok && dCalc?.success && dCalc?.data?.puede_confirmar) {
-            const productos_confirmados = (form.productos || []).map(p => ({ productoId: p.productoId, guardar_residuo: false, observaciones: null }));
-            await fetch(`${API_COTIZACIONES}/${newId}/confirmar-inventario`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ productos_confirmados, ID_usuario: user.ID }),
-            });
-          }
-  } catch { /* si falla, solo no descuenta automáticamente */ }
+      if (!res.ok || data?.success === false) {
+        const msg = data?.message || data?.error || "Error al crear cotización";
+        setErrorMsg(msg);
+        setTimeout(() => focusAccordingToError(msg), 50);
+        return;
       }
 
       closeModal();
@@ -445,7 +504,9 @@ const Sells = () => {
       await fetchAll();
     } catch (err) {
       console.error("crear cotización error:", err);
-      setErrorMsg("Error al crear la cotización");
+      const msg = err?.message || "Error al crear la cotización";
+      setErrorMsg(msg);
+      setTimeout(() => focusAccordingToError(msg), 50);
     }
   };
   void handleAdd;
@@ -489,23 +550,26 @@ const Sells = () => {
         body: JSON.stringify(payload),
       });
       const txt = await res.text();
-      let data; try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
-      if (!res.ok || data?.success === false) throw new Error(data?.message || data?.error || "No se pudo actualizar la cotización");
+      let data; try { data = JSON.parse(txt); } catch {
+        data = { success: false, message: txt && txt.trim().startsWith('<') ? 'El servidor respondió con un error (HTML). Intenta más tarde.' : txt };
+      }
+      if (!res.ok || data?.success === false) {
+        const msg = data?.message || data?.error || "No se pudo actualizar la cotización";
+        setErrorMsg(msg);
+        setTimeout(() => focusAccordingToError(msg), 50);
+        return;
+      }
 
-      // Intentar descontar inventario automáticamente (si cumple condiciones)
-      try {
-        const resCalc = await fetch(`${API_COTIZACIONES}/${id}/calcular-inventario`, { headers: { Authorization: `Bearer ${token}` } });
-        const txtCalc = await resCalc.text();
-        let dCalc; try { dCalc = JSON.parse(txtCalc); } catch { dCalc = { success: false, message: txtCalc }; }
-        if (resCalc.ok && dCalc?.success && dCalc?.data?.puede_confirmar) {
-          const productos_confirmados = (form.productos || []).map(p => ({ productoId: p.productoId, guardar_residuo: false, observaciones: null }));
-          await fetch(`${API_COTIZACIONES}/${id}/confirmar-inventario`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ productos_confirmados, ID_usuario: JSON.parse(localStorage.getItem("user") || "{}")?.ID }),
-          });
-        }
-      } catch { /* si falla, no detenemos el flujo */ }
+      // Guardar flag de ajuste si el backend reporta delta aplicado
+      const applied = Boolean(data?.data?.ajusteInventarioAplicado) || (Array.isArray(data?.data?.ajustes) && data.data.ajustes.some(a => a && a.deltaPiezas));
+      setAdjustFlags((prev) => ({ ...prev, [id]: applied }));
+      if (Array.isArray(data?.data?.ajustes)) {
+        setAdjustSummaries((prev) => ({ ...prev, [id]: data.data.ajustes }));
+      }
+
+      // Inventario: ahora se ajusta automáticamente en el backend por DIFERENCIAS
+      // (aumentos descuentan stock y generan residuo; reducciones regresan piezas).
+      // Ya no recalculamos/confirmamos desde el frontend aquí para evitar doble descuento.
 
       setModalOpen(null);
       setEditTarget(null);
@@ -532,23 +596,24 @@ const Sells = () => {
       let dataDet; try { dataDet = JSON.parse(txtDet); } catch { dataDet = { success: false, message: txtDet }; }
       if (!resDet.ok || dataDet?.success === false) throw new Error(dataDet?.message || "No se pudo obtener detalles de la orden");
       const payload = dataDet.data || dataDet;
-      const cot = payload.cotizacion || payload;
-      const prods = Array.isArray(payload.productos) ? payload.productos : [];
-
-      // 2) Asegurar anticipo = total (esto marca pagado en backend y supera el umbral del 50%)
-      const total = Number(cot.total || 0);
-      if (Number(cot.anticipo || 0) < total) {
-        const resAnti = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
+      const ord = payload.cotizacion || payload;
+      const totalOrder = Number(ord.total || 0);
+      const anticipoOrder = Number(ord.anticipo || 0);
+      let alreadyPaid = false;
+      // 1.1) Liquidar saldo antes del cálculo de inventario para evitar el bloqueo del 50%
+      if (!isNaN(totalOrder) && anticipoOrder < totalOrder) {
+        const resAntPre = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ anticipo: total })
+          body: JSON.stringify({ anticipo: totalOrder })
         });
-        const txtAnti = await resAnti.text();
-        let dAnti; try { dAnti = JSON.parse(txtAnti); } catch { dAnti = { success: false, message: txtAnti }; }
-        if (!resAnti.ok || dAnti?.success === false) throw new Error(dAnti?.message || "No se pudo actualizar el anticipo");
+        const txtAntPre = await resAntPre.text();
+        let dAntPre; try { dAntPre = JSON.parse(txtAntPre); } catch { dAntPre = { success: false, message: txtAntPre }; }
+        if (!resAntPre.ok || dAntPre?.success === false) throw new Error(dAntPre?.message || "No se pudo liquidar el saldo antes de confirmar");
+        alreadyPaid = true;
       }
-
-      // 3) Calcular inventario
+      const prods = Array.isArray(payload.productos) ? payload.productos : [];
+      // 2) Calcular inventario (si anticipo < 50% el backend lo reporta y no permitirá confirmar)
       const resCalc = await fetch(`${API_COTIZACIONES}/${id}/calcular-inventario`, { headers: { Authorization: `Bearer ${token}` } });
       const txtCalc = await resCalc.text();
       let dCalc; try { dCalc = JSON.parse(txtCalc); } catch { dCalc = { success: false, message: txtCalc }; }
@@ -558,10 +623,10 @@ const Sells = () => {
         throw new Error(errores || "Inventario insuficiente para confirmar la venta");
       }
 
-      // 4) Confirmar inventario (descontar piezas)
+      // 3) Confirmar inventario (descontar piezas)
       const productos_confirmados = prods.map(p => ({
         productoId: p.productoId || p.ID_producto || p.Producto?.ID,
-        guardar_residuo: false,
+        guardar_residuo: true,
         observaciones: null,
       })).filter(x => x.productoId);
 
@@ -574,12 +639,64 @@ const Sells = () => {
       let dConf; try { dConf = JSON.parse(txtConf); } catch { dConf = { success: false, message: txtConf }; }
       if (!resConf.ok || dConf?.success === false) throw new Error(dConf?.message || "No se pudo confirmar inventario");
 
-      // 5) Cerrar modal y refrescar
+      // 4) Marcar pagado (si no se hizo antes): actualizar anticipo = total
+      const totalAfter = Number((payload?.cotizacion?.total ?? payload?.total ?? 0));
+      if (!alreadyPaid && !isNaN(totalAfter)) {
+        const resAnt = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ anticipo: totalAfter })
+        });
+        const txtAnt = await resAnt.text();
+        let dAnt; try { dAnt = JSON.parse(txtAnt); } catch { dAnt = { success: false, message: txtAnt }; }
+        if (!resAnt.ok || dAnt?.success === false) throw new Error(dAnt?.message || "Inventario confirmado, pero no se pudo marcar como pagado");
+      }
+
+      // 5) Mostrar resumen de piezas descontadas y opción de ir a Residuos
+      setConfirmSummary(dConf?.data || null);
+      setConfirmSummaryOpen(true);
+
+      // Cerrar modal y refrescar lista
       setModalOpen(null);
       setVentaResumen(null);
       await fetchAll();
     } catch (e) {
       setErrorMsg(e.message || "No se puede realizar la venta");
+      setTimeout(() => focusAccordingToError(e.message || ''), 50);
+    }
+  };
+
+  // Duplicar cotización (para canceladas/pagadas o reordenar)
+  const handleDuplicar = async (cot) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_COTIZACIONES}/${cot.ID || cot.id}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+      const txt = await res.text();
+      let data; try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
+      if (!res.ok || data?.success === false) throw new Error(data?.message || 'No se pudieron cargar los detalles');
+      const payload = data.data || data;
+      const productosDetalle = Array.isArray(payload?.productos) ? payload.productos : [];
+      const mapped = productosDetalle.map((p) => ({
+        productoId: p.productoId || p.Producto?.ID || p.ID_producto || '',
+        cantidad: p.cantidad || 1,
+        tipoFigura: p.tipoFigura || p.tipo_figura || 'rectangulo',
+        base: p.base ?? null,
+        altura: p.altura ?? null,
+        radio: p.radio ?? null,
+        base2: p.base2 ?? null,
+        altura2: p.altura2 ?? null,
+        soclo_base: p.soclo_base ?? null,
+        soclo_altura: p.soclo_altura ?? null,
+        cubierta_base: p.cubierta_base ?? null,
+        cubierta_altura: p.cubierta_altura ?? null,
+        descripcion: p.descripcion ?? '',
+      }));
+      setForm({ ID_cliente: (cot.ID_cliente || ''), productos: mapped, anticipo: 0, status: 'pendiente' });
+      setErrorMsg('');
+      setModalOpen('add');
+      setTimeout(() => { const el = document.getElementById('cliente-select'); if (el) el.focus(); }, 50);
+    } catch (err) {
+      setErrorMsg(err.message || 'No se pudo duplicar la cotización');
     }
   };
 
@@ -665,9 +782,9 @@ const Sells = () => {
             <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>
               Clientes
             </button>
-            <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>
-              Usuarios
-            </button>
+              <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>
+                Usuarios
+              </button>
           </div>
            <div className="nav-datetime">
             <span>{dateStr}</span>
@@ -892,22 +1009,33 @@ const Sells = () => {
                           )}
                         </td>
                         <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <button className="edit-btn" title="Editar" onClick={() => openEditModal(cot)}>
-                            <FaEdit />
-                          </button>
-                          <button className="delete-btn" title="Cancelar" onClick={() => { setDeleteTarget(cot); setShowDeleteConfirm(true); }}>
-                            <FaTrash />
-                          </button>
-                          <button className="ventas-btn" title="Ver detalles" onClick={() => openDetails(cot)}>
-                            <FaEye />
-                          </button>
-                          {cot.status === "pendiente" && (
-                            <button className="ventas-btn" title="Confirmar venta" onClick={() => openConfirmVenta(cot)}>
-                              Venta
-                            </button>
+                          {cot.status === 'pendiente' ? (
+                            <>
+                              <button className="edit-btn" title="Editar" onClick={() => openEditModal(cot)}>
+                                <FaEdit />
+                              </button>
+                              <button className="delete-btn" title="Cancelar" onClick={() => { setDeleteTarget(cot); setShowDeleteConfirm(true); }}>
+                                <FaTrash />
+                              </button>
+                              <button className="ventas-btn" title="Ver detalles" onClick={() => openDetails(cot)}>
+                                <FaEye />
+                              </button>
+                              <button className="ventas-btn" title="Confirmar venta" onClick={() => openConfirmVenta(cot)}>
+                                Venta
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="ventas-btn" title="Ver detalles" onClick={() => openDetails(cot)}>
+                                <FaEye />
+                              </button>
+                              <button className="duplicate-btn" title="Duplicar cotización" onClick={() => handleDuplicar(cot)}>
+                                <FaCopy style={{ marginRight: 6 }} /> Duplicar
+                              </button>
+                            </>
                           )}
-                          <button className="ventas-btn" title="Generar PDF" onClick={() => handleGenerarPDF(cot.ID || cot.id)}>
-                            <FaSave />
+                          <button className="pdf-btn" title="Generar PDF" onClick={() => handleGenerarPDF(cot.ID || cot.id)}>
+                            <FaFilePdf />
                           </button>
                         </td>
                       </tr>
@@ -937,9 +1065,9 @@ const Sells = () => {
               <h2 style={{ fontSize: '1.1rem', marginBottom: 10, color: '#111' }}>Confirmar venta</h2>
               <div style={{ marginBottom: 10 }}>
                 <strong>Cliente:</strong> {clientes.find(c => c.ID === ventaResumen.ID_cliente)?.nombre || '-'}<br />
-                <strong>Importe:</strong> ${ventaResumen.importe || ventaResumen.total || 0}<br />
-                <strong>Anticipo:</strong> ${ventaResumen.anticipo || 0}<br />
-                <strong>Saldo:</strong> ${ventaResumen.resto || 0}<br />
+                <strong>Importe:</strong> ${Number(ventaResumen.total || 0).toFixed(2)}<br />
+                <strong>Anticipo:</strong> ${Number(ventaResumen.anticipo || 0).toFixed(2)}<br />
+                <strong>Saldo:</strong> ${Number(ventaResumen.resto || ((ventaResumen.total || 0) - (ventaResumen.anticipo || 0))).toFixed(2)}<br />
                 <strong>Vendedor:</strong> {ventaResumen.vendedor || '-'}<br />
                 <strong>Productos:</strong>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -951,10 +1079,23 @@ const Sells = () => {
                   })}
                 </ul>
               </div>
+              {Number(ventaResumen.anticipo || 0) < Number(ventaResumen.total || 0) && (
+                <div style={{
+                  background: '#fff8e1',
+                  border: '1px solid #ffe58f',
+                  color: '#874d00',
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  marginBottom: 10,
+                  fontSize: '.92rem'
+                }}>
+                  Al confirmar, se liquidará el saldo restante de ${((Number(ventaResumen.total || 0) - Number(ventaResumen.anticipo || 0)) || 0).toFixed(2)} y la cotización quedará como pagada.
+                </div>
+              )}
               {errorMsg && <div style={{ color: "#a30015", marginBottom: 8 }}>{errorMsg}</div>}
               <div style={{ display: 'flex', gap: 12, marginTop: 18 }}>
                 <button className="add-btn" style={{ flex: 1 }} onClick={handleConfirmVenta}>
-                  <FaSave style={{ marginRight: 6 }} /> Confirmar venta
+                  <FaSave style={{ marginRight: 6 }} /> {Number(ventaResumen.anticipo || 0) < Number(ventaResumen.total || 0) ? 'Confirmar y liquidar' : 'Confirmar venta'}
                 </button>
                 <button className="cancel-btn" style={{ flex: 1 }} onClick={() => setModalOpen(null)}>
                   <FaTimes style={{ marginRight: 6 }} /> Cancelar
@@ -1007,10 +1148,13 @@ const Sells = () => {
                   <div>
                     <label>Anticipo</label>
                     <input
+                      id="anticipo-input"
                       className="user-input"
                       type="number"
                       min="0"
                       step="0.01"
+                      onFocus={(e) => e.target.select()}
+                      onClick={(e) => e.target.select()}
                       value={form.anticipo ?? 0}
                       onChange={(e) => setForm({ ...form, anticipo: Number(e.target.value) })}
                     />
@@ -1297,7 +1441,10 @@ const Sells = () => {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
                 <h2 style={{ fontSize: '1.2rem', marginBottom: 0 }}>Detalles de la cotización</h2>
-                {detailsData?.cotizacion && (
+                {(() => {
+                  const st = (detailsData?.cotizacion?.status || '').toLowerCase();
+                  return !!detailsData?.cotizacion && st === 'pendiente';
+                })() && (
                   <button
                     className="add-btn"
                     onClick={() => { const cot = detailsData.cotizacion; setDetailsOpen(false); openEditModal(cot); }}
@@ -1330,8 +1477,15 @@ const Sells = () => {
                   const statusText = ((cot.status || cot.estado || cot.estatus || '') + '').toString();
                   const direccion = cliente?.direccion || [cliente?.calle, cliente?.colonia, cliente?.ciudad, cliente?.estado, cliente?.cp].filter(Boolean).join(', ');
                   const idVenta = cot.ID || cot.id || cot.ID_venta || cot.ventaId || cot.cotizacionId || cot.folio || '';
+                  // Badge si hubo ajuste en la última edición (flag local por ID)
+                  const ajusteBadge = adjustFlags[idVenta];
                   return (
                     <div>
+                      {ajusteBadge && (
+                        <div style={{ margin: '4px 0 8px', display: 'inline-block', padding: '4px 10px', borderRadius: 999, background: '#006d32', color: '#fff', fontWeight: 700, fontSize: '.85rem' }}>
+                          Ajuste de inventario aplicado
+                        </div>
+                      )}
                       <div className="details-grid">
                         <div className="details-item">
                           <div className="details-label">ID</div>
@@ -1461,6 +1615,62 @@ const Sells = () => {
                   );
                 })()
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de resumen de confirmación de inventario */}
+        {confirmSummaryOpen && (
+          <div className="modal-overlay" onClick={() => setConfirmSummaryOpen(false)}>
+            <div
+              className="modal-content"
+              style={{ width: 520, maxWidth: '92vw', maxHeight: '75vh', overflowY: 'auto', color: '#111', position: 'relative' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cerrar"
+                  aria-label="Cerrar"
+                  onClick={() => setConfirmSummaryOpen(false)}
+                />
+              </div>
+              <h2 style={{ fontSize: '1.1rem', marginBottom: 10 }}>Inventario descontado</h2>
+              {confirmSummary?.productos_procesados?.length ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="residuos-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th>Piezas descontadas</th>
+                        <th>Piezas restantes</th>
+                        <th>m² necesarios</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {confirmSummary.productos_procesados.map((p, i) => (
+                        <tr key={i}>
+                          <td>{p.producto}</td>
+                          <td>{p.piezas_descontadas}</td>
+                          <td>{p.piezas_restantes}</td>
+                          <td>{p.m2_necesarios?.toFixed ? p.m2_necesarios.toFixed(2) : p.m2_necesarios}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p>No se encontró el detalle de productos procesados.</p>
+              )}
+              <div style={{ marginTop: 12 }}>
+                <strong>Residuos guardados:</strong> {confirmSummary?.total_residuos_guardados ?? 0}
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 16, justifyContent: 'flex-end' }}>
+                <button className="ventas-btn" onClick={() => { setConfirmSummaryOpen(false); navigate('/residuos'); }}>
+                  Ver Residuos
+                </button>
+                <button className="cancel-btn" onClick={() => setConfirmSummaryOpen(false)}>Cerrar</button>
+              </div>
             </div>
           </div>
         )}
