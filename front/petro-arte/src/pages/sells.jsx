@@ -1507,6 +1507,7 @@ const Sells = () => {
                               onClick={() => handleGenerarPDF(cot.ID || cot.id)}
                             >
                               <FaFilePdf />
+                                Descargar PDF
                             </button>
                           </td>
                         </tr>
