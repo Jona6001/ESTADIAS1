@@ -88,8 +88,8 @@ const crearOrden = async (req, res) => {
         });
       }
 
-  // Calcular m2 por pieza
-  let m2_por_pieza = 0;
+      // Calcular m2 por pieza
+      let m2_por_pieza = 0;
 
       // Área de la figura principal
       if (tipoFigura === "circulo") {
@@ -99,7 +99,7 @@ const crearOrden = async (req, res) => {
             message: `El producto con ID ${productoId} requiere 'radio' para el tipo círculo`,
           });
         }
-  m2_por_pieza += Math.PI * Math.pow(radio, 2);
+        m2_por_pieza += Math.PI * Math.pow(radio, 2);
       } else if (tipoFigura === "ovalo") {
         if (!base || !altura) {
           return res.status(400).json({
@@ -107,7 +107,7 @@ const crearOrden = async (req, res) => {
             message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el tipo óvalo`,
           });
         }
-  m2_por_pieza += Math.PI * (base / 2) * (altura / 2);
+        m2_por_pieza += Math.PI * (base / 2) * (altura / 2);
       } else if (tipoFigura === "L" || tipoFigura === "L invertida") {
         // Para L o L invertida necesitamos dos rectángulos
         if (!base || !altura) {
@@ -123,7 +123,7 @@ const crearOrden = async (req, res) => {
           });
         }
         // Área de la L = área del rectángulo 1 + área del rectángulo 2
-  m2_por_pieza += base * altura + base2 * altura2;
+        m2_por_pieza += base * altura + base2 * altura2;
       } else {
         // Para cuadrado y rectangulo
         if (!base || !altura) {
@@ -132,7 +132,7 @@ const crearOrden = async (req, res) => {
             message: `El producto con ID ${productoId} requiere 'base' y 'altura'`,
           });
         }
-  m2_por_pieza += base * altura;
+        m2_por_pieza += base * altura;
       }
 
       // Área del soclo (parte pequeña que cae debajo, cubre la esquina)
@@ -147,8 +147,8 @@ const crearOrden = async (req, res) => {
 
       // Calcular el subtotal de este producto basándose en los m2 y el precio del producto
       // Asumiendo que el producto tiene la cantidad_m2 que representa el precio por m2
-  const total_m2 = m2_por_pieza * Number(cantidad || 1);
-  const subtotalProducto = total_m2 * productoExiste.cantidad_m2;
+      const total_m2 = m2_por_pieza * Number(cantidad || 1);
+      const subtotalProducto = total_m2 * productoExiste.cantidad_m2;
       totalCotizacion += subtotalProducto;
 
       // Crear el registro en ventas_productos
@@ -406,7 +406,7 @@ const actualizarAnticipo = async (req, res) => {
 // Además: ajusta inventario por DIFERENCIAS cuando cambia el contenido de la orden.
 // Regla:
 // - Si aumentan los m2 (por producto), se descuentan las piezas adicionales necesarias del inventario
-//   y se registra un Residuo por esa diferencia (si aplica residuo > 0). 
+//   y se registra un Residuo por esa diferencia (si aplica residuo > 0).
 // - Si disminuyen los m2 (por producto), se regresan las piezas completas sobrantes al inventario.
 //   (No se modifican registros de residuos históricos).
 const actualizarOrden = async (req, res) => {
@@ -443,7 +443,7 @@ const actualizarOrden = async (req, res) => {
       orden.ID_cliente = ID_cliente;
     }
 
-  // Reemplazar productos si se envían
+    // Reemplazar productos si se envían
     if (productos !== undefined) {
       if (!Array.isArray(productos) || productos.length === 0) {
         return res.status(400).json({
@@ -454,11 +454,16 @@ const actualizarOrden = async (req, res) => {
 
       // 1) Calcular diferencias contra los productos actuales de la orden
       //    a) Cargar productos actuales y sumar m2 por productoId
-      const actuales = await VentasProductos.findAll({ where: { cotizacionId: id } });
+      const actuales = await VentasProductos.findAll({
+        where: { cotizacionId: id },
+      });
       const m2ActualPorProducto = new Map();
       for (const vp of actuales) {
         const key = vp.productoId;
-        m2ActualPorProducto.set(key, (m2ActualPorProducto.get(key) || 0) + Number(vp.total_m2 || 0));
+        m2ActualPorProducto.set(
+          key,
+          (m2ActualPorProducto.get(key) || 0) + Number(vp.total_m2 || 0)
+        );
       }
 
       //    b) Calcular m2 nuevos por productoId a partir del payload
@@ -537,8 +542,10 @@ const actualizarOrden = async (req, res) => {
           }
           m2_por_pieza += base * altura;
         }
-        if (soclo_base && soclo_altura) m2_por_pieza += soclo_base * soclo_altura;
-        if (cubierta_base && cubierta_altura) m2_por_pieza += cubierta_base * cubierta_altura;
+        if (soclo_base && soclo_altura)
+          m2_por_pieza += soclo_base * soclo_altura;
+        if (cubierta_base && cubierta_altura)
+          m2_por_pieza += cubierta_base * cubierta_altura;
 
         const total_m2 = m2_por_pieza * Number(cantidad || 1);
         const subtotal = total_m2 * productoExiste.cantidad_m2;
@@ -569,10 +576,10 @@ const actualizarOrden = async (req, res) => {
         });
       }
 
-  // 2) Ajustar inventario por diferencias (delta de piezas por producto)
+      // 2) Ajustar inventario por diferencias (delta de piezas por producto)
       //    - Calculamos piezas = ceil(total_m2 / medida_por_unidad)
-  const ajustes = [];
-  let ajusteInventarioAplicado = false;
+      const ajustes = [];
+      let ajusteInventarioAplicado = false;
       const productoCache = new Map();
       const getProducto = async (idProd) => {
         if (!productoCache.has(idProd)) {
@@ -602,17 +609,20 @@ const actualizarOrden = async (req, res) => {
 
         if (deltaPiezas > 0) {
           // Aumentan las piezas necesarias -> descontar del inventario
-          if (prod.cantidad_piezas < deltaPiezas) {
-            return res.status(400).json({
-              success: false,
-              message: `Inventario insuficiente para ${prod.nombre}. Se requieren ${deltaPiezas} piezas adicionales, disponibles ${prod.cantidad_piezas}`,
-            });
-          }
+          const inventarioInsuficiente = prod.cantidad_piezas < deltaPiezas;
 
           prod.cantidad_piezas -= deltaPiezas;
           await prod.save();
 
-          ajustes.push({ productoId: pid, nombre: prod.nombre, deltaPiezas });
+          ajustes.push({
+            productoId: pid,
+            nombre: prod.nombre,
+            deltaPiezas,
+            inventario_insuficiente: inventarioInsuficiente,
+            deficit: inventarioInsuficiente
+              ? deltaPiezas - (prod.cantidad_piezas + deltaPiezas)
+              : 0,
+          });
           ajusteInventarioAplicado = true;
 
           // Registrar Residuo por la diferencia (si hay residuo > 0)
@@ -620,7 +630,8 @@ const actualizarOrden = async (req, res) => {
           const m2Adicionales = Math.max(0, m2Despues - m2Antes);
           const m2Usados = deltaPiezas * m2PorPieza;
           const residuoM2 = Math.max(0, m2Usados - m2Adicionales);
-          const porcentajeResiduo = m2PorPieza > 0 ? (residuoM2 / m2PorPieza) * 100 : 0;
+          const porcentajeResiduo =
+            m2PorPieza > 0 ? (residuoM2 / m2PorPieza) * 100 : 0;
 
           if (residuoM2 > 0) {
             try {
@@ -640,7 +651,10 @@ const actualizarOrden = async (req, res) => {
               });
             } catch (e) {
               // Si falla el registro del residuo, no detenemos el flujo de actualización
-              console.error("No se pudo registrar residuo diferencial:", e.message);
+              console.error(
+                "No se pudo registrar residuo diferencial:",
+                e.message
+              );
             }
           }
         } else if (deltaPiezas < 0) {
@@ -710,22 +724,37 @@ const actualizarOrden = async (req, res) => {
     const ordenIncluida = await Cotizacion.findByPk(orden.ID, {
       include: [
         { model: Usuario, attributes: ["ID", "nombre", "correo"] },
-        { model: Cliente, attributes: ["ID", "nombre", "telefono", "rfc", "direccion"] },
+        {
+          model: Cliente,
+          attributes: ["ID", "nombre", "telefono", "rfc", "direccion"],
+        },
       ],
     });
     const productosResp = await VentasProductos.findAll({
       where: { cotizacionId: orden.ID },
-      include: [{ model: Producto, attributes: ["ID", "nombre", "descripcion"] }],
+      include: [
+        { model: Producto, attributes: ["ID", "nombre", "descripcion"] },
+      ],
     });
+
+    // Verificar si hay ajustes con inventario insuficiente
+    const ajustesConDeficit = Array.isArray(req._ajustesResumen)
+      ? req._ajustesResumen.filter((a) => a.inventario_insuficiente)
+      : [];
+    const hayDeficitEnAjustes = ajustesConDeficit.length > 0;
 
     return res.status(200).json({
       success: true,
-      message: "Orden actualizada exitosamente",
+      message: hayDeficitEnAjustes
+        ? "Orden actualizada exitosamente. ADVERTENCIA: Algunos productos quedaron con inventario negativo."
+        : "Orden actualizada exitosamente",
       data: {
         cotizacion: ordenIncluida,
         productos: productosResp,
         ajusteInventarioAplicado: Boolean(req._ajusteInventarioAplicado),
         ajustes: Array.isArray(req._ajustesResumen) ? req._ajustesResumen : [],
+        inventario_insuficiente: hayDeficitEnAjustes,
+        productos_con_deficit: ajustesConDeficit,
       },
     });
   } catch (error) {
@@ -954,20 +983,17 @@ const confirmarInventario = async (req, res) => {
       const piezasNecesariasExactas = m2Necesarios / m2PorPieza;
       const piezasNecesarias = Math.ceil(piezasNecesariasExactas);
 
-      // Verificar inventario suficiente
-      if (producto.cantidad_piezas < piezasNecesarias) {
-        return res.status(400).json({
-          success: false,
-          message: `Inventario insuficiente para ${producto.nombre}. Disponible: ${producto.cantidad_piezas}, Necesario: ${piezasNecesarias}`,
-        });
-      }
+      // Verificar inventario y crear advertencia si es insuficiente
+      const inventarioInsuficiente =
+        producto.cantidad_piezas < piezasNecesarias;
+      const inventarioAnterior = producto.cantidad_piezas;
 
       // Calcular residuo
       const m2Usados = piezasNecesarias * m2PorPieza;
       const residuoM2 = m2Usados - m2Necesarios;
       const porcentajeResiduo = (residuoM2 / m2PorPieza) * 100;
 
-      // Descontar del inventario
+      // Descontar del inventario (permitir valores negativos)
       producto.cantidad_piezas -= piezasNecesarias;
       await producto.save();
 
@@ -1003,22 +1029,42 @@ const confirmarInventario = async (req, res) => {
         piezas_necesarias: piezasNecesarias,
         piezas_usadas_exactas: parseFloat(piezasNecesariasExactas.toFixed(2)),
         piezas_descontadas: piezasNecesarias,
+        piezas_disponibles_antes: inventarioAnterior,
         piezas_restantes: parseFloat(producto.cantidad_piezas.toFixed(2)),
         m2_necesarios: parseFloat(m2Necesarios.toFixed(4)),
         m2_usados: parseFloat(m2Usados.toFixed(4)),
         residuo_m2: parseFloat(residuoM2.toFixed(4)),
         residuo_guardado: confirmacion.guardar_residuo && residuoM2 > 0,
+        inventario_insuficiente: inventarioInsuficiente,
+        deficit: inventarioInsuficiente
+          ? piezasNecesarias - inventarioAnterior
+          : 0,
       });
     }
 
+    // Verificar si hay productos con inventario insuficiente
+    const productosConDeficit = resultados.filter(
+      (r) => r.inventario_insuficiente
+    );
+    const hayInventarioInsuficiente = productosConDeficit.length > 0;
+
     return res.status(200).json({
       success: true,
-      message: "Inventario confirmado y descontado exitosamente",
+      message: hayInventarioInsuficiente
+        ? "Inventario confirmado y descontado exitosamente. ADVERTENCIA: Algunos productos quedan con inventario negativo."
+        : "Inventario confirmado y descontado exitosamente",
       data: {
         ordenId: id,
         productos_procesados: resultados,
         residuos_registrados: residuosCreados,
         total_residuos_guardados: residuosCreados.length,
+        inventario_insuficiente: hayInventarioInsuficiente,
+        productos_con_deficit: productosConDeficit.map((p) => ({
+          producto: p.producto,
+          deficit: p.deficit,
+          inventario_quedara_en: p.piezas_restantes,
+        })),
+        total_productos_con_deficit: productosConDeficit.length,
       },
     });
   } catch (error) {
