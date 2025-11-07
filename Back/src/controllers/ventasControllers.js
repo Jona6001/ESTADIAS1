@@ -3,6 +3,7 @@ const VentasProductos = require("../models/ventasmodel");
 const Producto = require("../models/prodcutosModel");
 const Cliente = require("../models/Clientesmodel");
 const Usuario = require("../models/Usermodel");
+const HistorialAnticipos = require("../models/historialAnticiposModel");
 const Residuo = require("../models/residuosmodel");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
@@ -11,14 +12,30 @@ const path = require("path");
 // Crear una nueva orden (cotización con productos)
 const crearOrden = async (req, res) => {
   try {
-    const { ID_usuario, ID_cliente, productos, anticipo } = req.body;
+    const {
+      nombre,
+      ID_usuario,
+      ID_cliente,
+      productos,
+      anticipo,
+      incluir_iva = false,
+      subtotal,
+      iva = 0,
+      total,
+    } = req.body;
 
     // Validar que vengan los datos necesarios
-    if (!ID_usuario || !ID_cliente || !productos || productos.length === 0) {
+    if (
+      !nombre ||
+      !ID_usuario ||
+      !ID_cliente ||
+      !productos ||
+      productos.length === 0
+    ) {
       return res.status(400).json({
         success: false,
         message:
-          "Faltan datos obligatorios: ID_usuario, ID_cliente y productos",
+          "Faltan datos obligatorios: nombre, ID_usuario, ID_cliente y productos",
       });
     }
 
@@ -40,12 +57,16 @@ const crearOrden = async (req, res) => {
       });
     }
 
-    // Crear la cotización (sin total aún, se calculará después)
+    // Crear la cotización con los valores calculados en el frontend
     const nuevaCotizacion = await Cotizacion.create({
+      nombre,
       ID_usuario,
       ID_cliente,
       fecha_creacion: new Date(),
-      total: 0.0,
+      subtotal: subtotal || 0.0,
+      incluir_iva: incluir_iva,
+      iva: iva || 0.0,
+      total: total || 0.0,
       anticipo: anticipo || 0.0,
       status: "pendiente",
     });
@@ -58,16 +79,7 @@ const crearOrden = async (req, res) => {
       const {
         productoId,
         cantidad = 1,
-        tipoFigura,
-        base,
-        altura,
-        radio,
-        base2,
-        altura2,
-        soclo_base,
-        soclo_altura,
-        cubierta_base,
-        cubierta_altura,
+        tipo_medida, // "piezas" o "m2"
         descripcion,
       } = producto;
 
@@ -80,102 +92,79 @@ const crearOrden = async (req, res) => {
         });
       }
 
-      // Validar que venga el tipo de figura
-      if (!tipoFigura) {
+      // Validar que venga el tipo de medida
+      if (!tipo_medida || !["piezas", "m2"].includes(tipo_medida)) {
         return res.status(400).json({
           success: false,
-          message: "Cada producto debe tener un tipoFigura especificado",
+          message:
+            "Cada producto debe tener un tipo_medida válido: 'piezas' o 'm2'",
         });
       }
 
-      // Calcular m2 por pieza
-      let m2_por_pieza = 0;
-
-      // Área de la figura principal
-      if (tipoFigura === "circulo") {
-        if (!radio) {
-          return res.status(400).json({
-            success: false,
-            message: `El producto con ID ${productoId} requiere 'radio' para el tipo círculo`,
-          });
-        }
-        m2_por_pieza += Math.PI * Math.pow(radio, 2);
-      } else if (tipoFigura === "ovalo") {
-        if (!base || !altura) {
-          return res.status(400).json({
-            success: false,
-            message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el tipo óvalo`,
-          });
-        }
-        m2_por_pieza += Math.PI * (base / 2) * (altura / 2);
-      } else if (tipoFigura === "L" || tipoFigura === "L invertida") {
-        // Para L o L invertida necesitamos dos rectángulos
-        if (!base || !altura) {
-          return res.status(400).json({
-            success: false,
-            message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el primer rectángulo de la L`,
-          });
-        }
-        if (!base2 || !altura2) {
-          return res.status(400).json({
-            success: false,
-            message: `El producto con ID ${productoId} requiere 'base2' y 'altura2' para el segundo rectángulo de la L`,
-          });
-        }
-        // Área de la L = área del rectángulo 1 + área del rectángulo 2
-        m2_por_pieza += base * altura + base2 * altura2;
-      } else {
-        // Para cuadrado y rectangulo
-        if (!base || !altura) {
-          return res.status(400).json({
-            success: false,
-            message: `El producto con ID ${productoId} requiere 'base' y 'altura'`,
-          });
-        }
-        m2_por_pieza += base * altura;
+      // Validar que la cantidad sea válida
+      if (!cantidad || cantidad <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `La cantidad debe ser mayor que 0 para el producto ${productoExiste.nombre}`,
+        });
       }
 
-      // Área del soclo (parte pequeña que cae debajo, cubre la esquina)
-      if (soclo_base && soclo_altura) {
-        m2_por_pieza += soclo_base * soclo_altura;
+      // Determinar el tipo de producto
+      const esProductoPorPiezas =
+        productoExiste.cantidad_piezas !== null &&
+        productoExiste.cantidad_m2 === null;
+      const esProductoPorM2 =
+        productoExiste.cantidad_m2 !== null &&
+        productoExiste.medida_por_unidad !== null;
+
+      // Validar compatibilidad entre el tipo de medida solicitado y el tipo de producto
+      if (esProductoPorPiezas && tipo_medida !== "piezas") {
+        return res.status(400).json({
+          success: false,
+          message: `El producto ${productoExiste.nombre} solo se puede vender por piezas`,
+        });
       }
 
-      // Área de la cubierta (parte que sube, ejemplo: salpicadero de cocina)
-      if (cubierta_base && cubierta_altura) {
-        m2_por_pieza += cubierta_base * cubierta_altura;
+      if (esProductoPorM2 && tipo_medida !== "m2") {
+        return res.status(400).json({
+          success: false,
+          message: `El producto ${productoExiste.nombre} solo se puede vender por m²`,
+        });
       }
 
-      // Calcular el subtotal de este producto basándose en los m2 y el precio del producto
-      // Asumiendo que el producto tiene la cantidad_m2 que representa el precio por m2
-      const total_m2 = m2_por_pieza * Number(cantidad || 1);
-      const subtotalProducto = total_m2 * productoExiste.cantidad_m2;
-      totalCotizacion += subtotalProducto;
+      if (!esProductoPorPiezas && !esProductoPorM2) {
+        return res.status(400).json({
+          success: false,
+          message: `El producto ${productoExiste.nombre} tiene configuración de medidas inconsistente`,
+        });
+      }
 
-      // Crear el registro en ventas_productos
+      // Crear el registro en ventas_productos (el hook beforeSave calculará automáticamente las equivalencias)
       const ventaProducto = await VentasProductos.create({
         cotizacionId: nuevaCotizacion.ID,
         productoId,
-        cantidad: Number(cantidad || 1),
-        tipoFigura,
-        base: base || null,
-        altura: altura || null,
-        radio: radio || null,
-        base2: base2 || null,
-        altura2: altura2 || null,
-        soclo_base: soclo_base || null,
-        soclo_altura: soclo_altura || null,
-        cubierta_base: cubierta_base || null,
-        cubierta_altura: cubierta_altura || null,
-        total_m2: parseFloat(total_m2.toFixed(4)),
+        cantidad: Number(cantidad),
+        tipo_medida: tipo_medida,
         descripcion: descripcion || null,
       });
+
+      // El subtotal ya se calcula automáticamente en el hook beforeSave del modelo
+      totalCotizacion += parseFloat(ventaProducto.subtotal || 0);
 
       productosCreados.push(ventaProducto);
     }
 
-    // Actualizar el total de la cotización
-    nuevaCotizacion.total = parseFloat(totalCotizacion.toFixed(2));
-    await nuevaCotizacion.save();
+    // Si no se enviaron los totales desde el frontend, calcularlos automáticamente
+    if (!subtotal && !total) {
+      const subtotalCalculado = parseFloat(totalCotizacion.toFixed(2));
+      const ivaCalculado = incluir_iva ? subtotalCalculado * 0.16 : 0;
+      const totalCalculado = subtotalCalculado + ivaCalculado;
+
+      nuevaCotizacion.subtotal = subtotalCalculado;
+      nuevaCotizacion.iva = parseFloat(ivaCalculado.toFixed(2));
+      nuevaCotizacion.total = parseFloat(totalCalculado.toFixed(2));
+      await nuevaCotizacion.save();
+    }
 
     // Obtener la cotización completa con los productos
     const ordenCompleta = await Cotizacion.findByPk(nuevaCotizacion.ID, {
@@ -1220,24 +1209,38 @@ const generarFacturaPDF = async (req, res) => {
     const stream = fs.createWriteStream(rutaArchivo);
     doc.pipe(stream);
 
+    // Color guinda para líneas
+    const colorGuinda = "#8B1818";
+
     // --- ENCABEZADO ---
-    doc.fontSize(20).text("FACTURA / COTIZACIÓN", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(10).text(`No. Orden: ${orden.ID}`, { align: "center" });
+    // Agregar logo
+    const logoPath = path.join(
+      __dirname,
+      "../../front/petro-arte/src/assets/logo-petro.png"
+    );
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 50, 45, { width: 120 }); // Ajusta el width según necesites
+    }
+
+    // Información del documento a la derecha del logo
+    doc.fontSize(20).text("FACTURA / COTIZACIÓN", 200, 50, { align: "right" });
+    doc
+      .fontSize(10)
+      .text(`No. Orden: ${orden.ID}`, 200, 80, { align: "right" });
     doc.text(
       `Fecha: ${new Date(orden.fecha_creacion).toLocaleDateString("es-MX")}`,
-      {
-        align: "center",
-      }
+      200,
+      95,
+      { align: "right" }
     );
-    doc.moveDown(1);
+    doc.moveDown(2);
 
-    // Línea separadora
+    // Línea separadora con color guinda
     doc
-      .strokeColor("#aaaaaa")
+      .strokeColor(colorGuinda)
       .lineWidth(1)
-      .moveTo(50, doc.y)
-      .lineTo(550, doc.y)
+      .moveTo(50, 120)
+      .lineTo(550, 120)
       .stroke();
     doc.moveDown(1);
 
@@ -1265,7 +1268,7 @@ const generarFacturaPDF = async (req, res) => {
 
     // Línea separadora
     doc
-      .strokeColor("#aaaaaa")
+      .strokeColor(colorGuinda)
       .lineWidth(1)
       .moveTo(50, doc.y)
       .lineTo(550, doc.y)
@@ -1282,17 +1285,17 @@ const generarFacturaPDF = async (req, res) => {
     // Encabezados de tabla
     const tableTop = doc.y;
     const col1 = 50; // Producto
-    const col2 = 200; // Figura
-    const col3 = 300; // Medidas
-    const col4 = 430; // m²
-    const col5 = 490; // Precio
+    const col2 = 200; // Tipo Medida
+    const col3 = 280; // Cantidad
+    const col4 = 360; // Precio Unit.
+    const col5 = 480; // Subtotal
 
     doc.fontSize(9).fillColor("#444444");
     doc.text("Producto", col1, tableTop, { width: 140 });
-    doc.text("Figura", col2, tableTop, { width: 90 });
-    doc.text("Medidas", col3, tableTop, { width: 120 });
-    doc.text("m²", col4, tableTop, { width: 50, align: "right" });
-    doc.text("Precio", col5, tableTop, { width: 60, align: "right" });
+    doc.text("Unidad", col2, tableTop, { width: 70 });
+    doc.text("Cantidad", col3, tableTop, { width: 70, align: "right" });
+    doc.text("Precio Unit.", col4, tableTop, { width: 100, align: "right" });
+    doc.text("Subtotal", col5, tableTop, { width: 70, align: "right" });
 
     // Línea debajo del encabezado
     doc
@@ -1309,43 +1312,53 @@ const generarFacturaPDF = async (req, res) => {
     // Iterar sobre los productos
     for (const item of productosOrden) {
       const producto = item.Producto;
-      const precioPorM2 = producto.cantidad_m2 || 0;
-      const precioItem = item.total_m2 * precioPorM2;
-      totalM2 += item.total_m2;
-      subtotal += precioItem;
+      subtotal += parseFloat(item.subtotal || 0);
 
-      // Construir texto de medidas
-      let medidas = "";
-      if (item.tipoFigura === "circulo") {
-        medidas = `Radio: ${item.radio}m`;
-      } else if (item.tipoFigura === "ovalo") {
-        medidas = `${item.base}m × ${item.altura}m`;
-      } else if (item.tipoFigura === "L" || item.tipoFigura === "L invertida") {
-        medidas = `B1:${item.base}×${item.altura}m, B2:${item.base2}×${item.altura2}m`;
-      } else {
-        medidas = `${item.base}m × ${item.altura}m`;
-      }
-
-      // Agregar medidas adicionales
-      if (item.soclo_base && item.soclo_altura) {
-        medidas += `, Soclo:${item.soclo_base}×${item.soclo_altura}m`;
-      }
-      if (item.cubierta_base && item.cubierta_altura) {
-        medidas += `, Cub:${item.cubierta_base}×${item.cubierta_altura}m`;
+      if (item.tipo_medida === "m2") {
+        totalM2 += parseFloat(item.cantidad_m2_calculada || 0);
       }
 
       doc.fontSize(9).fillColor("#000000");
+
+      // Nombre del producto
       doc.text(producto.nombre, col1, yPosition, { width: 140 });
-      doc.text(item.tipoFigura, col2, yPosition, { width: 90 });
-      doc.text(medidas, col3, yPosition, { width: 120 });
-      doc.text(item.total_m2.toFixed(2), col4, yPosition, {
-        width: 50,
+
+      // Tipo de medida (piezas o m²)
+      doc.text(item.tipo_medida === "m2" ? "m²" : "piezas", col2, yPosition, {
+        width: 70,
+      });
+
+      // Cantidad según tipo de medida
+      const cantidad =
+        item.tipo_medida === "piezas"
+          ? item.cantidad_piezas_calculada
+          : item.cantidad_m2_calculada;
+      doc.text(cantidad.toFixed(2), col3, yPosition, {
+        width: 70,
         align: "right",
       });
-      doc.text(`$${precioItem.toFixed(2)}`, col5, yPosition, {
-        width: 60,
-        align: "right",
-      });
+
+      // Precio unitario
+      doc.text(
+        `$${parseFloat(item.precio_unitario || 0).toFixed(2)}`,
+        col4,
+        yPosition,
+        {
+          width: 100,
+          align: "right",
+        }
+      );
+
+      // Subtotal del producto
+      doc.text(
+        `$${parseFloat(item.subtotal || 0).toFixed(2)}`,
+        col5,
+        yPosition,
+        {
+          width: 70,
+          align: "right",
+        }
+      );
 
       // Descripción adicional si existe
       if (item.descripcion) {
@@ -1457,6 +1470,183 @@ const generarFacturaPDF = async (req, res) => {
   }
 };
 
+// Agregar nuevo anticipo (sumando al existente)
+// Obtener historial de anticipos de una orden
+const obtenerHistorialAnticipos = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const historial = await HistorialAnticipos.findAll({
+      where: { cotizacionId: id },
+      include: [
+        {
+          model: Usuario,
+          attributes: ["nombre", "correo"],
+        },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+
+    // Obtener la información de la orden
+    const orden = await Cotizacion.findByPk(id);
+    if (!orden) {
+      return res.status(404).json({
+        success: false,
+        message: "Orden no encontrada",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        orden: {
+          id: orden.ID,
+          anticipo_total: parseFloat(orden.anticipo),
+          total_orden: parseFloat(orden.total),
+          saldo_pendiente: (
+            parseFloat(orden.total) - parseFloat(orden.anticipo)
+          ).toFixed(2),
+        },
+        historial: historial.map((h) => ({
+          id: h.ID,
+          monto: parseFloat(h.monto),
+          fecha: h.fecha,
+          tipo: h.tipo,
+          usuario: h.Usuario.nombre,
+          observaciones: h.observaciones,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Error al obtener historial de anticipos:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+      error: error.message,
+    });
+  }
+};
+
+const agregarAnticipo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anticipo, ID_usuario, observaciones } = req.body;
+
+    // Validar que venga el ID del usuario
+    if (!ID_usuario) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID del usuario que registra el anticipo",
+      });
+    }
+
+    // Validar que el anticipo sea un número válido
+    if (anticipo === undefined || anticipo === null || isNaN(anticipo)) {
+      return res.status(400).json({
+        success: false,
+        message: "El anticipo debe ser un número válido",
+      });
+    }
+
+    // Validar que el anticipo no sea negativo
+    if (anticipo < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "El anticipo no puede ser negativo",
+      });
+    }
+
+    const orden = await Cotizacion.findByPk(id);
+
+    if (!orden) {
+      return res.status(404).json({
+        success: false,
+        message: "Orden no encontrada",
+      });
+    }
+
+    // Sumar el nuevo anticipo al anticipo existente
+    const anticipoActual = parseFloat(orden.anticipo) || 0;
+    const nuevoAnticipo = anticipoActual + parseFloat(anticipo);
+
+    // Validar que el anticipo total no sea mayor al total
+    if (nuevoAnticipo > parseFloat(orden.total)) {
+      return res.status(400).json({
+        success: false,
+        message: "El anticipo total no puede ser mayor al total de la orden",
+      });
+    }
+
+    // Crear registro en el historial
+    const registroHistorial = await HistorialAnticipos.create({
+      cotizacionId: id,
+      usuarioId: ID_usuario,
+      monto: anticipo,
+      tipo: "nuevo",
+      observaciones: observaciones || null,
+    });
+
+    // Actualizar la orden
+    orden.anticipo = nuevoAnticipo.toFixed(2);
+    orden.fecha_ultimo_anticipo = registroHistorial.fecha;
+
+    // Si el anticipo es igual al total, marcar como pagado
+    if (parseFloat(orden.anticipo) >= parseFloat(orden.total)) {
+      orden.status = "pagado";
+    }
+
+    await orden.save();
+
+    // Obtener el historial actualizado
+    const historialActualizado = await HistorialAnticipos.findAll({
+      where: { cotizacionId: id },
+      order: [["fecha", "DESC"]],
+      include: [
+        {
+          model: Usuario,
+          attributes: ["nombre", "correo"],
+        },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Anticipo agregado exitosamente",
+      data: {
+        orden: {
+          id: orden.ID,
+          anticipo_total: parseFloat(orden.anticipo),
+          anticipo_agregado: parseFloat(anticipo),
+          total_orden: parseFloat(orden.total),
+          saldo_pendiente: (parseFloat(orden.total) - nuevoAnticipo).toFixed(2),
+          status: orden.status,
+        },
+        anticipo_registrado: {
+          id: registroHistorial.ID,
+          monto: parseFloat(registroHistorial.monto),
+          fecha: registroHistorial.fecha,
+          observaciones: registroHistorial.observaciones,
+        },
+        historial: historialActualizado.map((h) => ({
+          id: h.ID,
+          monto: parseFloat(h.monto),
+          fecha: h.fecha,
+          tipo: h.tipo,
+          usuario: h.Usuario.nombre,
+          observaciones: h.observaciones,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Error al agregar anticipo:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   crearOrden,
   obtenerOrdenes,
@@ -1464,6 +1654,8 @@ module.exports = {
   actualizarOrden,
   actualizarStatusOrden,
   actualizarAnticipo,
+  agregarAnticipo,
+  obtenerHistorialAnticipos,
   calcularInventarioNecesario,
   confirmarInventario,
   listarResiduosDisponibles,

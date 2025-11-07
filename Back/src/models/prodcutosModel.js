@@ -11,6 +11,10 @@ const Producto = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+    tipoMaterial: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+    },
     nombre: {
       type: DataTypes.STRING(100),
       allowNull: false,
@@ -30,18 +34,18 @@ const Producto = sequelize.define(
     },
     cantidad_piezas: {
       type: DataTypes.FLOAT,
-      allowNull: false,
-      defaultValue: 0, // puede ser negativo
+      allowNull: true,
+      defaultValue: null, // permite null cuando no aplica, permite valores negativos
     },
     medida_por_unidad: {
       type: DataTypes.FLOAT,
-      allowNull: false,
-      defaultValue: 0,
+      allowNull: true,
+      defaultValue: null, // permite null cuando no aplica, permite valores negativos
     },
     cantidad_m2: {
       type: DataTypes.FLOAT,
-      allowNull: false,
-      defaultValue: 0,
+      allowNull: true,
+      defaultValue: null, // permite null cuando no aplica, permite valores negativos
     },
     ID_usuario_creador: {
       type: DataTypes.INTEGER,
@@ -58,9 +62,28 @@ const Producto = sequelize.define(
     timestamps: false,
     hooks: {
       beforeSave: (producto) => {
-        // Calcula la cantidad en m2 automáticamente
-        producto.cantidad_m2 =
-          producto.cantidad_piezas * producto.medida_por_unidad;
+        // Calcula la cantidad en m2 automáticamente solo si ambos valores están presentes y son números válidos
+        const piezasValidas =
+          producto.cantidad_piezas !== null &&
+          producto.cantidad_piezas !== undefined &&
+          !isNaN(producto.cantidad_piezas);
+
+        const medidaValida =
+          producto.medida_por_unidad !== null &&
+          producto.medida_por_unidad !== undefined &&
+          !isNaN(producto.medida_por_unidad);
+
+        if (piezasValidas && medidaValida) {
+          // Permite el cálculo incluso con valores negativos
+          producto.cantidad_m2 =
+            producto.cantidad_piezas * producto.medida_por_unidad;
+        } else {
+          // Si falta algún valor o no es válido, no calcular automáticamente
+          // Mantener el valor actual de cantidad_m2 o dejarlo como null si no se especifica
+          if (producto.cantidad_m2 === undefined) {
+            producto.cantidad_m2 = null;
+          }
+        }
       },
     },
   }

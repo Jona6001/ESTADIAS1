@@ -8,6 +8,8 @@ const {
   actualizarStatusOrden,
   actualizarOrden,
   actualizarAnticipo,
+  agregarAnticipo,
+  obtenerHistorialAnticipos,
   calcularInventarioNecesario,
   confirmarInventario,
   listarResiduosDisponibles,
@@ -21,6 +23,12 @@ router.get("/api/ordenes/:id", validarToken, obtenerOrdenPorId);
 router.put("/api/ordenes/:id", validarToken, actualizarOrden);
 router.patch("/api/ordenes/:id/status", validarToken, actualizarStatusOrden);
 router.patch("/api/ordenes/:id/anticipo", validarToken, actualizarAnticipo);
+router.post("/api/ordenes/:id/anticipos", validarToken, agregarAnticipo);
+router.get(
+  "/api/ordenes/:id/anticipos",
+  validarToken,
+  obtenerHistorialAnticipos
+);
 
 // Rutas de inventario
 router.get(

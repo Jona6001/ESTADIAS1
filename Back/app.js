@@ -15,10 +15,13 @@ const authRoutes = require("./src/routes/authRoutes");
 const clientRoutes = require("./src/routes/clientesRoutes");
 const productRoutes = require("./src/routes/productRoutes");
 const ventasRoutes = require("./src/routes/ventasRoutes");
+const residuosRoutes = require("./src/routes/residuosRoutes");
+
 app.use(authRoutes);
 app.use(clientRoutes);
 app.use(productRoutes);
 app.use(ventasRoutes);
+app.use(residuosRoutes);
 // ...existing code...
 
 // ...existing code...
@@ -28,8 +31,8 @@ app.use(ventasRoutes);
 async function initializeApp() {
   try {
     await connectDB();
-  // Sincronizar modelos con la base de datos (actualiza esquemas automáticamente)
-  await sequelize.sync({ alter: true });
+    // Sincronizar modelos con la base de datos (actualiza esquemas automáticamente)
+    await sequelize.sync({ alter: false, force: false });
     console.log("Tablas sincronizadas correctamente");
     // Iniciar el servidor
     app.listen(PORT, () => {
