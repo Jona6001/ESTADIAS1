@@ -58,8 +58,8 @@ const Sells = () => {
   // Rol
   let isAdmin = false;
   try {
-    const userObj = JSON.parse(localStorage.getItem("user")||"{}");
-    isAdmin = String(userObj?.rol||"").toLowerCase()==="admin";
+    const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+    isAdmin = String(userObj?.rol || "").toLowerCase() === "admin";
   } catch {}
 
   // Datos
@@ -105,7 +105,12 @@ const Sells = () => {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      const options = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+      const options = {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      };
       setDateStr(now.toLocaleDateString("es-MX", options));
       setTimeStr(now.toLocaleTimeString("es-MX", { hour12: false }));
     };
@@ -120,28 +125,48 @@ const Sells = () => {
     setErrorMsg("");
     try {
       const token = localStorage.getItem("token");
-      const authHeaders = token ? { Authorization: `Bearer ${token}`, Accept: "application/json" } : { Accept: "application/json" };
+      const authHeaders = token
+        ? { Authorization: `Bearer ${token}`, Accept: "application/json" }
+        : { Accept: "application/json" };
       const [resClientes, resProductos, resCots] = await Promise.all([
         fetch(API_CLIENTES, { headers: authHeaders }),
         fetch(API_PRODUCTOS, { headers: authHeaders }),
         fetch(API_COTIZACIONES, { headers: authHeaders }),
       ]);
-      const unauthorized = [resClientes, resProductos, resCots].find(r => r.status === 401 || r.status === 403);
+      const unauthorized = [resClientes, resProductos, resCots].find(
+        (r) => r.status === 401 || r.status === 403
+      );
       if (unauthorized) {
-        setErrorMsg("Sesión inválida o expirada. Inicia sesión nuevamente para ver las ventas.");
-        setClientes([]); setProductos([]); setCotizaciones([]);
+        setErrorMsg(
+          "Sesión inválida o expirada. Inicia sesión nuevamente para ver las ventas."
+        );
+        setClientes([]);
+        setProductos([]);
+        setCotizaciones([]);
         return;
       }
       const parseSafe = async (res) => {
         const text = await res.text();
-        try { return JSON.parse(text); } catch { return text; }
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
       };
       const cData = await parseSafe(resClientes);
       const pData = await parseSafe(resProductos);
       const oData = await parseSafe(resCots);
-      const clientesArr = Array.isArray(cData) ? cData : cData?.clientes || cData?.data || [];
-      const productosArr = Array.isArray(pData) ? pData : pData?.productos || pData?.data || [];
-      const cotArr = Array.isArray(oData?.data) ? oData.data : Array.isArray(oData) ? oData : [];
+      const clientesArr = Array.isArray(cData)
+        ? cData
+        : cData?.clientes || cData?.data || [];
+      const productosArr = Array.isArray(pData)
+        ? pData
+        : pData?.productos || pData?.data || [];
+      const cotArr = Array.isArray(oData?.data)
+        ? oData.data
+        : Array.isArray(oData)
+        ? oData
+        : [];
       setClientes(Array.isArray(clientesArr) ? clientesArr : []);
       setProductos(Array.isArray(productosArr) ? productosArr : []);
       setCotizaciones(Array.isArray(cotArr) ? cotArr : []);
@@ -232,29 +257,56 @@ const Sells = () => {
       // Traer orden + historial de anticipos en paralelo
       const [resOrden, resHist] = await Promise.all([
         fetch(`${API_COTIZACIONES}/${id}`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
         }),
         fetch(`${API_COTIZACIONES}/${id}/anticipos`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
         }),
       ]);
-      const [txtOrden, txtHist] = await Promise.all([resOrden.text(), resHist.text()]);
+      const [txtOrden, txtHist] = await Promise.all([
+        resOrden.text(),
+        resHist.text(),
+      ]);
       let dataOrden, dataHist;
-      try { dataOrden = JSON.parse(txtOrden); } catch { dataOrden = { success: false, message: txtOrden }; }
-      try { dataHist = JSON.parse(txtHist); } catch { dataHist = { success: false, message: txtHist }; }
-      if (!resOrden.ok || dataOrden?.success === false) throw new Error(dataOrden?.message || "No se pudo cargar la orden");
+      try {
+        dataOrden = JSON.parse(txtOrden);
+      } catch {
+        dataOrden = { success: false, message: txtOrden };
+      }
+      try {
+        dataHist = JSON.parse(txtHist);
+      } catch {
+        dataHist = { success: false, message: txtHist };
+      }
+      if (!resOrden.ok || dataOrden?.success === false)
+        throw new Error(dataOrden?.message || "No se pudo cargar la orden");
       const payload = dataOrden.data || dataOrden;
       const ord = payload.cotizacion || payload;
       const prods = Array.isArray(payload.productos) ? payload.productos : [];
-      const histArr = resHist.ok && dataHist?.success !== false ? (dataHist?.data?.historial || []) : [];
+      const histArr =
+        resHist.ok && dataHist?.success !== false
+          ? dataHist?.data?.historial || []
+          : [];
 
       const total = Number(ord.total || 0);
       const anticipo = Number(ord.anticipo || 0);
       const resto = Number((total - anticipo).toFixed(2));
-      const vendedor = ord.Usuario?.nombre || ord.usuario?.nombre || cot.Usuario?.nombre || cot.usuario?.nombre || "-";
+      const vendedor =
+        ord.Usuario?.nombre ||
+        ord.usuario?.nombre ||
+        cot.Usuario?.nombre ||
+        cot.usuario?.nombre ||
+        "-";
       const productosNorm = prods
         .map((p) => ({
-          productoId: p.productoId || p.ID_producto || p.Producto?.ID || p.producto?.ID,
+          productoId:
+            p.productoId || p.ID_producto || p.Producto?.ID || p.producto?.ID,
           cantidad: p.cantidad,
           tipoFigura: p.tipoFigura || p.tipo_figura || p.figura,
           medidas: p.medidas || p.medida || p.medida_custom,
@@ -299,16 +351,29 @@ const Sells = () => {
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ anticipo: monto, ID_usuario: user?.ID, observaciones: confirmObs || null }),
+        body: JSON.stringify({
+          anticipo: monto,
+          ID_usuario: user?.ID,
+          observaciones: confirmObs || null,
+        }),
       });
       const txt = await res.text();
       let data;
-      try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
-      if (!res.ok || data?.success === false) throw new Error(data?.message || "No se pudo agregar el anticipo");
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "No se pudo agregar el anticipo");
       // Actualizar valores locales del resumen
       const anticipoNuevo = Number((ventaResumen.anticipo || 0) + monto);
       const restoNuevo = Number((ventaResumen.total || 0) - anticipoNuevo);
-      setVentaResumen((prev) => ({ ...prev, anticipo: anticipoNuevo, resto: restoNuevo }));
+      setVentaResumen((prev) => ({
+        ...prev,
+        anticipo: anticipoNuevo,
+        resto: restoNuevo,
+      }));
       setConfirmAbono("");
       setConfirmObs("");
       setErrorMsg("");
@@ -330,21 +395,46 @@ const Sells = () => {
       // Obtener detalles y también historial de anticipos en paralelo
       const [res, resAntHist] = await Promise.all([
         fetch(`${API_COTIZACIONES}/${id}`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
         }),
         fetch(`${API_COTIZACIONES}/${id}/anticipos`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
         }),
       ]);
-      const [txt, txtAntHist] = await Promise.all([res.text(), resAntHist.text()]);
+      const [txt, txtAntHist] = await Promise.all([
+        res.text(),
+        resAntHist.text(),
+      ]);
       let data, dataAntHist;
-      try { data = JSON.parse(txt); } catch { data = { success: false, message: txt }; }
-      try { dataAntHist = JSON.parse(txtAntHist); } catch { dataAntHist = { success: false, message: txtAntHist }; }
-      if (!res.ok || data?.success === false) throw new Error(data?.message || "No se pudo cargar detalles");
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      try {
+        dataAntHist = JSON.parse(txtAntHist);
+      } catch {
+        dataAntHist = { success: false, message: txtAntHist };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "No se pudo cargar detalles");
       // si historial falla, seguimos mostrando detalles
       const base = data.data || data;
-      const hist = resAntHist.ok && dataAntHist?.success !== false ? (dataAntHist?.data?.historial || []) : [];
-      setDetailsData({ ...base, anticipos: hist, anticipos_meta: dataAntHist?.data?.orden || null });
+      const hist =
+        resAntHist.ok && dataAntHist?.success !== false
+          ? dataAntHist?.data?.historial || []
+          : [];
+      setDetailsData({
+        ...base,
+        anticipos: hist,
+        anticipos_meta: dataAntHist?.data?.orden || null,
+      });
     } catch (err) {
       setErrorMsg(err.message || "No se pudo cargar detalles");
     } finally {
@@ -358,7 +448,9 @@ const Sells = () => {
     // Solo permitir edición de productos cuando la cotización está 'pendiente'
     const rawStatus = (cot.status || "").toLowerCase();
     if (rawStatus !== "pendiente") {
-      setErrorMsg("Solo se pueden modificar productos cuando el estado es 'pendiente'. Cambia el estado a pendiente o duplica la cotización.");
+      setErrorMsg(
+        "Solo se pueden modificar productos cuando el estado es 'pendiente'. Cambia el estado a pendiente o duplica la cotización."
+      );
       return;
     }
     // Abrir modal con datos base
@@ -406,10 +498,7 @@ const Sells = () => {
       const mapped = productosDetalle.map((p) => ({
         productoId: p.productoId || p.Producto?.ID || p.ID_producto || "",
         // Preferir m² calculados si existen, luego total_m2, luego cantidad
-        cantidad:
-          p.cantidad_m2_calculada ??
-          p.total_m2 ??
-          p.cantidad ?? 0,
+        cantidad: p.cantidad_m2_calculada ?? p.total_m2 ?? p.cantidad ?? 0,
         descripcion: p.descripcion ?? "",
       }));
 
@@ -460,9 +549,7 @@ const Sells = () => {
   const handleProductoChange = (idx, field, value) => {
     const next = [...form.productos];
     // Convertir numéricos
-    const numericFields = [
-      "cantidad",
-    ];
+    const numericFields = ["cantidad"];
     next[idx] = {
       ...next[idx],
       [field]:
@@ -686,7 +773,7 @@ const Sells = () => {
           data.data.ajustes.some((a) => a && a.deltaPiezas));
       setAdjustFlags((prev) => ({ ...prev, [id]: applied }));
       if (Array.isArray(data?.data?.ajustes)) {
-  // Legacy: setAdjustSummaries removed; if ajustes data needed later, store via dedicated state hook.
+        // Legacy: setAdjustSummaries removed; if ajustes data needed later, store via dedicated state hook.
       }
 
       // Inventario: ahora se ajusta automáticamente en el backend por DIFERENCIAS
@@ -715,12 +802,22 @@ const Sells = () => {
     try {
       // 1) Obtener detalles actuales
       const resDet = await fetch(`${API_COTIZACIONES}/${id}`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
       });
       const txtDet = await resDet.text();
       let dataDet;
-      try { dataDet = JSON.parse(txtDet); } catch { dataDet = { success: false, message: txtDet }; }
-      if (!resDet.ok || dataDet?.success === false) throw new Error(dataDet?.message || "No se pudo obtener detalles de la orden");
+      try {
+        dataDet = JSON.parse(txtDet);
+      } catch {
+        dataDet = { success: false, message: txtDet };
+      }
+      if (!resDet.ok || dataDet?.success === false)
+        throw new Error(
+          dataDet?.message || "No se pudo obtener detalles de la orden"
+        );
       const payload = dataDet.data || dataDet;
       const ord = payload.cotizacion || payload;
       const totalOrder = Number(ord.total || 0);
@@ -730,17 +827,30 @@ const Sells = () => {
       if (liquidar && anticipoOrder < totalOrder) {
         const resAntPre = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({ anticipo: totalOrder }),
         });
         const txtAntPre = await resAntPre.text();
-        let dAntPre; try { dAntPre = JSON.parse(txtAntPre); } catch { dAntPre = { success: false, message: txtAntPre }; }
-        if (!resAntPre.ok || dAntPre?.success === false) throw new Error(dAntPre?.message || "No se pudo liquidar antes de confirmar");
+        let dAntPre;
+        try {
+          dAntPre = JSON.parse(txtAntPre);
+        } catch {
+          dAntPre = { success: false, message: txtAntPre };
+        }
+        if (!resAntPre.ok || dAntPre?.success === false)
+          throw new Error(
+            dAntPre?.message || "No se pudo liquidar antes de confirmar"
+          );
         anticipoOrder = totalOrder;
       }
 
       // Validar anticipo mínimo 70% solo para confirmar estado; si no alcanza, salir silenciosamente
-      const percentAfter = totalOrder > 0 ? (anticipoOrder / totalOrder) * 100 : 0;
+      const percentAfter =
+        totalOrder > 0 ? (anticipoOrder / totalOrder) * 100 : 0;
       if (percentAfter < 70) {
         return;
       }
@@ -748,12 +858,24 @@ const Sells = () => {
       const newStatus = percentAfter >= 100 ? "pagado" : "en_proceso";
       const resSt = await fetch(`${API_COTIZACIONES}/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ status: newStatus }),
       });
       const txtSt = await resSt.text();
-      let dSt; try { dSt = JSON.parse(txtSt); } catch { dSt = { success: false, message: txtSt }; }
-      if (!resSt.ok || dSt?.success === false) throw new Error(dSt?.message || "No se pudo actualizar el estado de la venta");
+      let dSt;
+      try {
+        dSt = JSON.parse(txtSt);
+      } catch {
+        dSt = { success: false, message: txtSt };
+      }
+      if (!resSt.ok || dSt?.success === false)
+        throw new Error(
+          dSt?.message || "No se pudo actualizar el estado de la venta"
+        );
 
       // 3) Mostrar resumen/instrucción manual
       setConfirmSummary({
@@ -999,14 +1121,6 @@ const Sells = () => {
               </button>
               <button
                 className={`nav-btn${
-                  location.pathname === "/residuos" ? " nav-btn-active" : ""
-                }`}
-                onClick={() => navigate("/residuos")}
-              >
-                Residuos
-              </button>
-              <button
-                className={`nav-btn${
                   location.pathname === "/ventas" ? " nav-btn-active" : ""
                 }`}
                 onClick={() => navigate("/ventas")}
@@ -1049,14 +1163,6 @@ const Sells = () => {
               onClick={() => navigate("/inventario")}
             >
               Inventario
-            </button>
-            <button
-              className={`nav-btn${
-                location.pathname === "/residuos" ? " nav-btn-active" : ""
-              }`}
-              onClick={() => navigate("/residuos")}
-            >
-              Residuos
             </button>
             <button
               className={`nav-btn${
@@ -1196,7 +1302,7 @@ const Sells = () => {
               justifyContent: "space-between",
               alignItems: "center",
               gap: 12,
-              flexWrap: 'wrap'
+              flexWrap: "wrap",
             }}
           >
             <span>{errorMsg}</span>
@@ -1254,7 +1360,9 @@ const Sells = () => {
               <option value="cancelado">Cancelado</option>
               <option value="en_proceso">En proceso</option>
               <option value="terminado">Terminado</option>
-              <option value="entregado_pagopendiente">Entregado (pago pendiente)</option>
+              <option value="entregado_pagopendiente">
+                Entregado (pago pendiente)
+              </option>
             </select>
           ) : cotFilterField === "fecha" ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1315,8 +1423,12 @@ const Sells = () => {
             <FaTimes /> Limpiar
           </button>
         </div>
-        <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
-          <button type="button" className="ventas-btn" onClick={() => setReportOpen(true)}>
+        <div style={{ display: "flex", gap: 8, margin: "8px 0" }}>
+          <button
+            type="button"
+            className="ventas-btn"
+            onClick={() => setReportOpen(true)}
+          >
             Reporte por cliente
           </button>
         </div>
@@ -1422,22 +1534,43 @@ const Sells = () => {
                       const resto = (total - anticipo).toFixed(2);
                       const pctAnt = total > 0 ? (anticipo / total) * 100 : 0;
                       // Badge pago
-                      let pagoBadge = 'No pagado';
-                      let pagoColor = '#c0392b';
-                      if (anticipo >= total && total > 0) { pagoBadge = 'Liquidado'; pagoColor = '#2ecc71'; }
-                      else if (pctAnt >= 70) { pagoBadge = '≥70%'; pagoColor = '#27ae60'; }
-                      else if (anticipo > 0) { pagoBadge = 'Parcial'; pagoColor = '#f39c12'; }
+                      let pagoBadge = "No pagado";
+                      let pagoColor = "#c0392b";
+                      if (anticipo >= total && total > 0) {
+                        pagoBadge = "Liquidado";
+                        pagoColor = "#2ecc71";
+                      } else if (pctAnt >= 70) {
+                        pagoBadge = "≥70%";
+                        pagoColor = "#27ae60";
+                      } else if (anticipo > 0) {
+                        pagoBadge = "Parcial";
+                        pagoColor = "#f39c12";
+                      }
                       const abonosCount = cot.abonos_count || 0;
-                      const ultimoAbonoFecha = cot.ultimo_abono_fecha ? new Date(cot.ultimo_abono_fecha).toLocaleDateString() : '-';
-                      const ultimoAbonoMonto = cot.ultimo_abono_monto != null ? Number(cot.ultimo_abono_monto).toFixed(2) : null;
+                      const ultimoAbonoFecha = cot.ultimo_abono_fecha
+                        ? new Date(cot.ultimo_abono_fecha).toLocaleDateString()
+                        : "-";
+                      const ultimoAbonoMonto =
+                        cot.ultimo_abono_monto != null
+                          ? Number(cot.ultimo_abono_monto).toFixed(2)
+                          : null;
                       const rawStatus = (cot.status || "").toLowerCase();
                       const statusClass = `status-badge status-${rawStatus}`;
                       return (
                         <tr key={cot.ID || cot.id}>
                           <td>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <strong>{cot.nombre || cot.titulo || '(sin título)'}</strong>
-                              <small style={{ color: '#666' }}>Cotización #{cot.ID || cot.id}</small>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                              }}
+                            >
+                              <strong>
+                                {cot.nombre || cot.titulo || "(sin título)"}
+                              </strong>
+                              <small style={{ color: "#666" }}>
+                                Cotización #{cot.ID || cot.id}
+                              </small>
                             </div>
                           </td>
                           <td>{cliente.nombre || "-"}</td>
@@ -1448,16 +1581,38 @@ const Sells = () => {
                           <td>${total.toFixed(2)}</td>
                           <td>${resto}</td>
                           <td>
-                            <span style={{ background: pagoColor, color: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: '.7rem' }}>{pagoBadge}</span>
+                            <span
+                              style={{
+                                background: pagoColor,
+                                color: "#fff",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                fontSize: ".7rem",
+                              }}
+                            >
+                              {pagoBadge}
+                            </span>
                           </td>
                           <td>
-                            {abonosCount === 0 ? '0' : (
-                              <span title={`Último: ${ultimoAbonoFecha}${ultimoAbonoMonto ? ` • $${ultimoAbonoMonto}` : ''}`}>{abonosCount}</span>
+                            {abonosCount === 0 ? (
+                              "0"
+                            ) : (
+                              <span
+                                title={`Último: ${ultimoAbonoFecha}${
+                                  ultimoAbonoMonto
+                                    ? ` • $${ultimoAbonoMonto}`
+                                    : ""
+                                }`}
+                              >
+                                {abonosCount}
+                              </span>
                             )}
                           </td>
                           <td>
                             {cot.status ? (
-                              <span className={statusClass}>{renderStatus(cot.status)}</span>
+                              <span className={statusClass}>
+                                {renderStatus(cot.status)}
+                              </span>
                             ) : (
                               "-"
                             )}
@@ -1517,7 +1672,9 @@ const Sells = () => {
                                   <button
                                     className="ventas-btn"
                                     title="Marcar terminado"
-                                    onClick={() => updateStatus(cot, "terminado")}
+                                    onClick={() =>
+                                      updateStatus(cot, "terminado")
+                                    }
                                   >
                                     Terminar
                                   </button>
@@ -1526,7 +1683,12 @@ const Sells = () => {
                                   <button
                                     className="ventas-btn"
                                     title="Marcar entregado (pago pendiente)"
-                                    onClick={() => updateStatus(cot, "entregado_pagopendiente")}
+                                    onClick={() =>
+                                      updateStatus(
+                                        cot,
+                                        "entregado_pagopendiente"
+                                      )
+                                    }
                                   >
                                     Entregado
                                   </button>
@@ -1546,7 +1708,7 @@ const Sells = () => {
                               onClick={() => handleGenerarPDF(cot.ID || cot.id)}
                             >
                               <FaFilePdf />
-                                Descargar PDF
+                              Descargar PDF
                             </button>
                           </td>
                         </tr>
@@ -1563,39 +1725,54 @@ const Sells = () => {
           <div className="modal-overlay" onClick={() => setReportOpen(false)}>
             <div
               className="modal-content"
-              style={{ width: 720, maxWidth: '95vw' }}
+              style={{ width: 720, maxWidth: "95vw" }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="modal-close-row">
-                <button className="modal-close-btn" onClick={() => setReportOpen(false)} />
+                <button
+                  className="modal-close-btn"
+                  onClick={() => setReportOpen(false)}
+                />
               </div>
               <h2 style={{ marginTop: 0 }}>Ventas por cliente</h2>
               {(() => {
                 const rows = new Map();
                 for (const cot of cotizaciones) {
                   const cliente = cot.Cliente || cot.cliente || {};
-                  const key = cliente.ID || cliente.id || cliente.nombre || 'Desconocido';
-                  const nombre = cliente.nombre || 'Desconocido';
+                  const key =
+                    cliente.ID || cliente.id || cliente.nombre || "Desconocido";
+                  const nombre = cliente.nombre || "Desconocido";
                   const total = Number(cot.total || 0);
                   const anticipo = Number(cot.anticipo || 0);
                   const saldo = total - anticipo;
-                  const prev = rows.get(key) || { nombre, pedidos: 0, total: 0, anticipo: 0, saldo: 0 };
+                  const prev = rows.get(key) || {
+                    nombre,
+                    pedidos: 0,
+                    total: 0,
+                    anticipo: 0,
+                    saldo: 0,
+                  };
                   prev.pedidos += 1;
                   prev.total += total;
                   prev.anticipo += anticipo;
                   prev.saldo += saldo;
                   rows.set(key, prev);
                 }
-                const arr = Array.from(rows.values()).sort((a,b)=> b.total - a.total);
+                const arr = Array.from(rows.values()).sort(
+                  (a, b) => b.total - a.total
+                );
                 if (arr.length === 0) return <p>No hay datos.</p>;
-                const totales = arr.reduce((acc,r)=>({
-                  pedidos: acc.pedidos + r.pedidos,
-                  total: acc.total + r.total,
-                  anticipo: acc.anticipo + r.anticipo,
-                  saldo: acc.saldo + r.saldo,
-                }), { pedidos:0,total:0,anticipo:0,saldo:0 });
+                const totales = arr.reduce(
+                  (acc, r) => ({
+                    pedidos: acc.pedidos + r.pedidos,
+                    total: acc.total + r.total,
+                    anticipo: acc.anticipo + r.anticipo,
+                    saldo: acc.saldo + r.saldo,
+                  }),
+                  { pedidos: 0, total: 0, anticipo: 0, saldo: 0 }
+                );
                 return (
-                  <div style={{ overflowX: 'auto' }}>
+                  <div style={{ overflowX: "auto" }}>
                     <table className="ventas-table" style={{ minWidth: 640 }}>
                       <thead>
                         <tr>
@@ -1617,11 +1794,21 @@ const Sells = () => {
                           </tr>
                         ))}
                         <tr>
-                          <td><strong>TOTALES</strong></td>
-                          <td><strong>{totales.pedidos}</strong></td>
-                          <td><strong>${totales.total.toFixed(2)}</strong></td>
-                          <td><strong>${totales.anticipo.toFixed(2)}</strong></td>
-                          <td><strong>${totales.saldo.toFixed(2)}</strong></td>
+                          <td>
+                            <strong>TOTALES</strong>
+                          </td>
+                          <td>
+                            <strong>{totales.pedidos}</strong>
+                          </td>
+                          <td>
+                            <strong>${totales.total.toFixed(2)}</strong>
+                          </td>
+                          <td>
+                            <strong>${totales.anticipo.toFixed(2)}</strong>
+                          </td>
+                          <td>
+                            <strong>${totales.saldo.toFixed(2)}</strong>
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -1629,7 +1816,10 @@ const Sells = () => {
                 );
               })()}
               <div className="modal-btn-row" style={{ marginTop: 10 }}>
-                <button className="cancel-btn" onClick={() => setReportOpen(false)}>
+                <button
+                  className="cancel-btn"
+                  onClick={() => setReportOpen(false)}
+                >
                   Cerrar
                 </button>
               </div>
@@ -1671,9 +1861,9 @@ const Sells = () => {
                 const anticipo = Number(ventaResumen.anticipo || 0);
                 const saldo = total - anticipo;
                 const pct = total > 0 ? (anticipo / total) * 100 : 0;
-                const clienteNombre = clientes.find(
-                  (c) => c.ID === ventaResumen.ID_cliente
-                )?.nombre || "-";
+                const clienteNombre =
+                  clientes.find((c) => c.ID === ventaResumen.ID_cliente)
+                    ?.nombre || "-";
                 const barraColor =
                   pct >= 100
                     ? "#2ecc71"
@@ -1691,18 +1881,26 @@ const Sells = () => {
                       gridTemplateColumns: "1fr 1fr",
                     }}
                   >
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
                       <div style={{ fontSize: ".85rem" }}>
                         <strong>Cliente:</strong> {clienteNombre}
                       </div>
                       <div style={{ fontSize: ".85rem" }}>
-                        <strong>Vendedor:</strong> {ventaResumen.vendedor || "-"}
+                        <strong>Vendedor:</strong>{" "}
+                        {ventaResumen.vendedor || "-"}
                       </div>
                       <div style={{ fontSize: ".85rem" }}>
                         <strong>Importe total:</strong> ${total.toFixed(2)}
                       </div>
                       <div style={{ fontSize: ".85rem" }}>
-                        <strong>Anticipo:</strong> ${anticipo.toFixed(2)} ({pct.toFixed(1)}%)
+                        <strong>Anticipo:</strong> ${anticipo.toFixed(2)} (
+                        {pct.toFixed(1)}%)
                       </div>
                       <div style={{ fontSize: ".85rem" }}>
                         <strong>Saldo:</strong> ${saldo.toFixed(2)}
@@ -1718,12 +1916,23 @@ const Sells = () => {
                             fontSize: ".75rem",
                           }}
                         >
-                          Falta para 70%: <strong>${(total * 0.7 - anticipo).toFixed(2)}</strong>
+                          Falta para 70%:{" "}
+                          <strong>
+                            ${(total * 0.7 - anticipo).toFixed(2)}
+                          </strong>
                         </div>
                       )}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ fontSize: ".75rem", fontWeight: 600 }}>Progreso de pago</div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontSize: ".75rem", fontWeight: 600 }}>
+                        Progreso de pago
+                      </div>
                       <div
                         style={{
                           height: 16,
@@ -1759,7 +1968,9 @@ const Sells = () => {
                           {pct.toFixed(1)}%
                         </span>
                       </div>
-                      <div style={{ fontSize: ".75rem", fontWeight: 600 }}>Productos</div>
+                      <div style={{ fontSize: ".75rem", fontWeight: 600 }}>
+                        Productos
+                      </div>
                       <div
                         style={{
                           background: "#f7f9fa",
@@ -1773,7 +1984,9 @@ const Sells = () => {
                       >
                         <ul style={{ margin: 0, paddingLeft: 16 }}>
                           {(ventaResumen.productos || []).map((p, i) => {
-                            const prod = productos.find((pr) => pr.ID === p.productoId);
+                            const prod = productos.find(
+                              (pr) => pr.ID === p.productoId
+                            );
                             return (
                               <li key={i} style={{ marginBottom: 2 }}>
                                 {prod?.nombre || ""} • {p.cantidad} m²
@@ -1790,23 +2003,57 @@ const Sells = () => {
                 const total = Number(ventaResumen.total || 0);
                 const anticipo = Number(ventaResumen.anticipo || 0);
                 const pct = total > 0 ? (anticipo / total) * 100 : 0;
-                if (pct >= 70) return (
-                  <div style={{background:'#ecf9f1', border:'1px solid #b7e4cd', color:'#25694b', padding:'6px 10px', borderRadius:6, marginBottom:12, fontSize:'.7rem'}}>
-                    Umbral alcanzado: ya puedes confirmar la venta.
-                  </div>
-                );
+                if (pct >= 70)
+                  return (
+                    <div
+                      style={{
+                        background: "#ecf9f1",
+                        border: "1px solid #b7e4cd",
+                        color: "#25694b",
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        marginBottom: 12,
+                        fontSize: ".7rem",
+                      }}
+                    >
+                      Umbral alcanzado: ya puedes confirmar la venta.
+                    </div>
+                  );
                 const sugerido = total * 0.7;
                 const falta = Math.max(0, sugerido - anticipo);
                 return (
-                  <div style={{background:'#fffdf5', border:'1px solid #f5e2b8', color:'#7a5c21', padding:'8px 10px', borderRadius:6, marginBottom:12, fontSize:'.7rem'}}>
-                    Aún no alcanza el umbral del 70% para confirmar la venta. Falta <strong>${falta.toFixed(2)}</strong>. Puedes seguir abonando cualquier monto y cuando llegues al 70% el botón Confirmar se habilitará.
+                  <div
+                    style={{
+                      background: "#fffdf5",
+                      border: "1px solid #f5e2b8",
+                      color: "#7a5c21",
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      marginBottom: 12,
+                      fontSize: ".7rem",
+                    }}
+                  >
+                    Aún no alcanza el umbral del 70% para confirmar la venta.
+                    Falta <strong>${falta.toFixed(2)}</strong>. Puedes seguir
+                    abonando cualquier monto y cuando llegues al 70% el botón
+                    Confirmar se habilitará.
                   </div>
                 );
               })()}
-              {Number(ventaResumen.anticipo || 0) < Number(ventaResumen.total || 0) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginBottom: 12 }}>
+              {Number(ventaResumen.anticipo || 0) <
+                Number(ventaResumen.total || 0) && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
                   <div>
-                    <label style={{ display: 'block', fontWeight: 600 }}>Monto a abonar</label>
+                    <label style={{ display: "block", fontWeight: 600 }}>
+                      Monto a abonar
+                    </label>
                     <input
                       className="user-input"
                       type="number"
@@ -1823,14 +2070,20 @@ const Sells = () => {
                     const saldoTotal = Math.max(0, total - anticipo);
                     if (saldoTotal <= 0) return null;
                     return (
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                      <div
+                        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+                      >
                         {falta70 > 0 && (
                           <button
                             type="button"
                             className="ventas-btn"
                             onClick={() => {
                               setConfirmAbono(falta70.toFixed(2));
-                              setConfirmObs(`Abono para alcanzar 70% (faltaban $${falta70.toFixed(2)})`);
+                              setConfirmObs(
+                                `Abono para alcanzar 70% (faltaban $${falta70.toFixed(
+                                  2
+                                )})`
+                              );
                             }}
                           >
                             Abonar hasta 70% (${falta70.toFixed(2)})
@@ -1841,7 +2094,9 @@ const Sells = () => {
                           className="add-btn"
                           onClick={() => {
                             setConfirmAbono(saldoTotal.toFixed(2));
-                            setConfirmObs(`Liquidación de saldo ($${saldoTotal.toFixed(2)})`);
+                            setConfirmObs(
+                              `Liquidación de saldo ($${saldoTotal.toFixed(2)})`
+                            );
                           }}
                         >
                           Liquidar saldo (${saldoTotal.toFixed(2)})
@@ -1850,7 +2105,9 @@ const Sells = () => {
                     );
                   })()}
                   <div>
-                    <label style={{ display: 'block', fontWeight: 600 }}>Observaciones (opcional)</label>
+                    <label style={{ display: "block", fontWeight: 600 }}>
+                      Observaciones (opcional)
+                    </label>
                     <textarea
                       className="user-input"
                       rows={2}
@@ -1858,51 +2115,85 @@ const Sells = () => {
                       onChange={(e) => setConfirmObs(e.target.value)}
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'stretch' }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      justifyContent: "stretch",
+                    }}
+                  >
                     <button
                       className="add-btn"
-                      style={{ flexBasis: '100%', fontSize: '1rem' }}
+                      style={{ flexBasis: "100%", fontSize: "1rem" }}
                       disabled={confirmLoading}
                       onClick={handleAgregarAnticipo}
                     >
-                      {confirmLoading ? 'Guardando…' : 'Agregar anticipo'}
+                      {confirmLoading ? "Guardando…" : "Agregar anticipo"}
                     </button>
                   </div>
                   {(() => {
                     // Mostrar resumen histórico rápido si está en ventaResumen
                     const historial = ventaResumen.historialAnticipos || [];
-                    if (!Array.isArray(historial) || historial.length === 0) return null;
-                    const totalAbonos = historial.reduce((acc,h)=> acc + Number(h.monto||0),0);
+                    if (!Array.isArray(historial) || historial.length === 0)
+                      return null;
+                    const totalAbonos = historial.reduce(
+                      (acc, h) => acc + Number(h.monto || 0),
+                      0
+                    );
                     return (
-                      <div style={{
-                        background:'#f7f9fa',
-                        border:'1px solid #dde3e6',
-                        padding:'8px 10px',
-                        borderRadius:6,
-                        fontSize:'.7rem'
-                      }}>
+                      <div
+                        style={{
+                          background: "#f7f9fa",
+                          border: "1px solid #dde3e6",
+                          padding: "8px 10px",
+                          borderRadius: 6,
+                          fontSize: ".7rem",
+                        }}
+                      >
                         <strong>Historial de abonos:</strong>
-                        <table style={{ width:'100%', fontSize:'.65rem', marginTop:6 }}>
+                        <table
+                          style={{
+                            width: "100%",
+                            fontSize: ".65rem",
+                            marginTop: 6,
+                          }}
+                        >
                           <thead>
-                            <tr style={{ textAlign:'left' }}>
-                              <th style={{ padding:'2px 4px' }}>Fecha</th>
-                              <th style={{ padding:'2px 4px' }}>Monto</th>
-                              <th style={{ padding:'2px 4px' }}>Obs.</th>
+                            <tr style={{ textAlign: "left" }}>
+                              <th style={{ padding: "2px 4px" }}>Fecha</th>
+                              <th style={{ padding: "2px 4px" }}>Monto</th>
+                              <th style={{ padding: "2px 4px" }}>Obs.</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {historial.slice(-5).reverse().map((h,i)=>(
-                              <tr key={i}>
-                                <td style={{ padding:'2px 4px' }}>{new Date(h.fecha || h.createdAt || h.updatedAt || Date.now()).toLocaleDateString()}</td>
-                                <td style={{ padding:'2px 4px' }}>${Number(h.monto||0).toFixed(2)}</td>
-                                <td style={{ padding:'2px 4px' }}>{h.observaciones?.slice(0,20) || '-'}</td>
-                              </tr>
-                            ))}
+                            {historial
+                              .slice(-5)
+                              .reverse()
+                              .map((h, i) => (
+                                <tr key={i}>
+                                  <td style={{ padding: "2px 4px" }}>
+                                    {new Date(
+                                      h.fecha ||
+                                        h.createdAt ||
+                                        h.updatedAt ||
+                                        Date.now()
+                                    ).toLocaleDateString()}
+                                  </td>
+                                  <td style={{ padding: "2px 4px" }}>
+                                    ${Number(h.monto || 0).toFixed(2)}
+                                  </td>
+                                  <td style={{ padding: "2px 4px" }}>
+                                    {h.observaciones?.slice(0, 20) || "-"}
+                                  </td>
+                                </tr>
+                              ))}
                           </tbody>
                           <tfoot>
                             <tr>
-                              <td style={{ padding:'2px 4px' }}>Total</td>
-                              <td style={{ padding:'2px 4px' }}>${totalAbonos.toFixed(2)}</td>
+                              <td style={{ padding: "2px 4px" }}>Total</td>
+                              <td style={{ padding: "2px 4px" }}>
+                                ${totalAbonos.toFixed(2)}
+                              </td>
                               <td />
                             </tr>
                           </tfoot>
@@ -1917,7 +2208,14 @@ const Sells = () => {
                   {errorMsg}
                 </div>
               )}
-              <div style={{ display: "flex", gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  marginTop: 18,
+                  flexWrap: "wrap",
+                }}
+              >
                 <button
                   className="cancel-btn"
                   style={{ flex: 1 }}
@@ -1925,7 +2223,8 @@ const Sells = () => {
                 >
                   <FaTimes style={{ marginRight: 6 }} /> Cancelar
                 </button>
-                {Number(ventaResumen.anticipo || 0) < Number(ventaResumen.total || 0) && (
+                {Number(ventaResumen.anticipo || 0) <
+                  Number(ventaResumen.total || 0) && (
                   <button
                     className="ventas-btn"
                     style={{ flex: 1 }}
@@ -1975,8 +2274,18 @@ const Sells = () => {
                   : "Nueva cotización"}
               </h2>
               {/* Acción rápida: agregar producto arriba */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-                <button type="button" className="add-btn" onClick={handleAddProducto}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  marginBottom: 6,
+                }}
+              >
+                <button
+                  type="button"
+                  className="add-btn"
+                  onClick={handleAddProducto}
+                >
                   <FaPlus style={{ marginRight: 6 }} /> Agregar producto
                 </button>
               </div>
@@ -2005,7 +2314,9 @@ const Sells = () => {
                       type="text"
                       placeholder="Ej. Proyecto cocina López"
                       value={form.nombre || ""}
-                      onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                      onChange={(e) =>
+                        setForm({ ...form, nombre: e.target.value })
+                      }
                     />
                   </div>
                   <div>
@@ -2027,24 +2338,28 @@ const Sells = () => {
                     </select>
                   </div>
                   <div>
-                    <label style={{ display: 'block', marginBottom: 4 }}>IVA</label>
+                    <label style={{ display: "block", marginBottom: 4 }}>
+                      IVA
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setForm({ ...form, incluir_iva: !form.incluir_iva })}
+                      onClick={() =>
+                        setForm({ ...form, incluir_iva: !form.incluir_iva })
+                      }
                       className="toggle-btn"
                       style={{
-                        width: '100%',
-                        background: form.incluir_iva ? '#27ae60' : '#bdc3c7',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '8px 10px',
+                        width: "100%",
+                        background: form.incluir_iva ? "#27ae60" : "#bdc3c7",
+                        color: "#fff",
+                        border: "none",
+                        padding: "8px 10px",
                         borderRadius: 6,
                         fontWeight: 600,
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,.15)'
+                        cursor: "pointer",
+                        boxShadow: "0 1px 2px rgba(0,0,0,.15)",
                       }}
                     >
-                      {form.incluir_iva ? 'IVA aplicado (16%)' : 'Sin IVA'}
+                      {form.incluir_iva ? "IVA aplicado (16%)" : "Sin IVA"}
                     </button>
                   </div>
                   <div>
@@ -2061,7 +2376,9 @@ const Sells = () => {
                       <option value="cancelado">Cancelado</option>
                       <option value="en_proceso">En proceso</option>
                       <option value="terminado">Terminado</option>
-                      <option value="entregado_pagopendiente">Entregado (pago pendiente)</option>
+                      <option value="entregado_pagopendiente">
+                        Entregado (pago pendiente)
+                      </option>
                     </select>
                   </div>
                 </div>
@@ -2098,39 +2415,80 @@ const Sells = () => {
                   ) : null}
 
                   {(form.productos || []).map((p, i) => {
-                    const prodMatch = productos.find((pr) => pr.ID === (p.productoId || p.ID_producto));
-                    const imgUrl = prodMatch?.imagen || prodMatch?.image || prodMatch?.img || null;
+                    const prodMatch = productos.find(
+                      (pr) => pr.ID === (p.productoId || p.ID_producto)
+                    );
+                    const imgUrl =
+                      prodMatch?.imagen ||
+                      prodMatch?.image ||
+                      prodMatch?.img ||
+                      null;
                     return (
                       <div key={`edit-prod-${i}`} className="product-card">
-                        <div className="product-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div
+                          className="product-card-header"
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
                           <span>Producto {i + 1}</span>
-                          <button type="button" className="cancel-btn" onClick={() => handleRemoveProducto(i)}>Quitar</button>
+                          <button
+                            type="button"
+                            className="cancel-btn"
+                            onClick={() => handleRemoveProducto(i)}
+                          >
+                            Quitar
+                          </button>
                         </div>
                         {imgUrl ? (
-                          <img src={imgUrl} alt={prodMatch?.nombre || `Producto ${i + 1}`} className="product-thumb" />
+                          <img
+                            src={imgUrl}
+                            alt={prodMatch?.nombre || `Producto ${i + 1}`}
+                            className="product-thumb"
+                          />
                         ) : (
-                          <div className="product-thumb product-thumb--placeholder">Sin imagen</div>
+                          <div className="product-thumb product-thumb--placeholder">
+                            Sin imagen
+                          </div>
                         )}
                         <div className="product-grid">
                           <div className="product-field">
-                            <label htmlFor={`prod-${i}-productoId`}>Nombre del producto</label>
+                            <label htmlFor={`prod-${i}-productoId`}>
+                              Nombre del producto
+                            </label>
                             <select
                               id={`prod-${i}-productoId`}
                               className="user-input"
                               value={p.productoId || ""}
-                              onChange={(e) => handleProductoChange(i, "productoId", Number(e.target.value))}
+                              onChange={(e) =>
+                                handleProductoChange(
+                                  i,
+                                  "productoId",
+                                  Number(e.target.value)
+                                )
+                              }
                             >
                               <option value="">Selecciona un producto…</option>
                               {(productos || [])
                                 // Preferir productos por m² cuando sea posible
-                                .filter((pr) => pr.cantidad_m2 != null && pr.medida_por_unidad != null)
+                                .filter(
+                                  (pr) =>
+                                    pr.cantidad_m2 != null &&
+                                    pr.medida_por_unidad != null
+                                )
                                 .map((pr) => (
-                                  <option key={pr.ID} value={pr.ID}>{pr.nombre}</option>
+                                  <option key={pr.ID} value={pr.ID}>
+                                    {pr.nombre}
+                                  </option>
                                 ))}
                             </select>
                           </div>
                           <div className="product-field">
-                            <label htmlFor={`prod-${i}-cantidad`}>m² totales</label>
+                            <label htmlFor={`prod-${i}-cantidad`}>
+                              m² totales
+                            </label>
                             <input
                               id={`prod-${i}-cantidad`}
                               className="user-input"
@@ -2138,7 +2496,13 @@ const Sells = () => {
                               min="0.01"
                               step="0.01"
                               value={p.cantidad ?? ""}
-                              onChange={(e) => handleProductoChange(i, "cantidad", e.target.value)}
+                              onChange={(e) =>
+                                handleProductoChange(
+                                  i,
+                                  "cantidad",
+                                  e.target.value
+                                )
+                              }
                             />
                           </div>
                           <div className="product-field product-field--full">
@@ -2147,7 +2511,13 @@ const Sells = () => {
                               className="user-input"
                               rows={2}
                               value={p.descripcion || ""}
-                              onChange={(e) => handleProductoChange(i, "descripcion", e.target.value)}
+                              onChange={(e) =>
+                                handleProductoChange(
+                                  i,
+                                  "descripcion",
+                                  e.target.value
+                                )
+                              }
                             />
                           </div>
                         </div>
@@ -2167,14 +2537,27 @@ const Sells = () => {
                   const ivaVal = form.incluir_iva ? subtotal * 0.16 : 0;
                   const total = subtotal + ivaVal;
                   return (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 8 }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, 1fr)",
+                        gap: 10,
+                        marginTop: 8,
+                      }}
+                    >
                       <div className="details-item">
                         <div className="details-label">Subtotal</div>
-                        <div className="details-value">${subtotal.toFixed(2)}</div>
+                        <div className="details-value">
+                          ${subtotal.toFixed(2)}
+                        </div>
                       </div>
                       <div className="details-item">
-                        <div className="details-label">IVA {form.incluir_iva ? "(16%)" : "(no aplicado)"}</div>
-                        <div className="details-value">${ivaVal.toFixed(2)}</div>
+                        <div className="details-label">
+                          IVA {form.incluir_iva ? "(16%)" : "(no aplicado)"}
+                        </div>
+                        <div className="details-value">
+                          ${ivaVal.toFixed(2)}
+                        </div>
                       </div>
                       <div className="details-item">
                         <div className="details-label">Total</div>
@@ -2195,11 +2578,27 @@ const Sells = () => {
                   const ivaVal = form.incluir_iva ? subtotal * 0.16 : 0;
                   const totalCalc = subtotal + ivaVal;
                   const sugerido = totalCalc * 0.7;
-                  const pct = totalCalc > 0 ? (Number(form.anticipo || 0) / totalCalc) * 100 : 0;
-                  const barColor = pct >= 100 ? '#2ecc71' : pct >= 70 ? '#27ae60' : pct > 0 ? '#f39c12' : '#c0392b';
+                  const pct =
+                    totalCalc > 0
+                      ? (Number(form.anticipo || 0) / totalCalc) * 100
+                      : 0;
+                  const barColor =
+                    pct >= 100
+                      ? "#2ecc71"
+                      : pct >= 70
+                      ? "#27ae60"
+                      : pct > 0
+                      ? "#f39c12"
+                      : "#c0392b";
                   return (
                     <div style={{ marginTop: 10 }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 10,
+                        }}
+                      >
                         <div>
                           <label>Anticipo</label>
                           <input
@@ -2211,37 +2610,106 @@ const Sells = () => {
                             onFocus={(e) => e.target.select()}
                             onClick={(e) => e.target.select()}
                             value={form.anticipo ?? 0}
-                            onChange={(e) => setForm({ ...form, anticipo: Number(e.target.value) })}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                anticipo: Number(e.target.value),
+                              })
+                            }
                           />
                         </div>
                         <div>
-                          <label style={{ display:'block' }}>Progreso anticipo</label>
-                          <div style={{ height: 16, background:'#ecf0f1', borderRadius:10, position:'relative', overflow:'hidden' }}>
-                            <div style={{ width:`${Math.min(100,pct).toFixed(2)}%`, background:barColor, height:'100%', transition:'width .3s' }} />
-                            <span style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.65rem', fontWeight:700, color: pct > 15 ? '#fff' : '#2c3e50' }}>{pct.toFixed(1)}%</span>
+                          <label style={{ display: "block" }}>
+                            Progreso anticipo
+                          </label>
+                          <div
+                            style={{
+                              height: 16,
+                              background: "#ecf0f1",
+                              borderRadius: 10,
+                              position: "relative",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${Math.min(100, pct).toFixed(2)}%`,
+                                background: barColor,
+                                height: "100%",
+                                transition: "width .3s",
+                              }}
+                            />
+                            <span
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: ".65rem",
+                                fontWeight: 700,
+                                color: pct > 15 ? "#fff" : "#2c3e50",
+                              }}
+                            >
+                              {pct.toFixed(1)}%
+                            </span>
                           </div>
                         </div>
                       </div>
                       {totalCalc > 0 && (
-                        <div style={{
-                          background: '#f4f6f7',
-                          border: '1px solid #dce2e4',
-                          padding: '8px 10px',
-                          borderRadius: 6,
-                          fontSize: '.8rem',
-                          display: 'flex',
-                          alignItems: 'stretch',
-                          justifyContent: 'space-between',
-                          gap: 14,
-                          flexWrap: 'wrap',
-                          marginTop: 8
-                        }}>
-                          <div style={{ flex: '1 1 220px' }}>
-                            Anticipo sugerido (70%): <strong>${sugerido.toFixed(2)}</strong>
+                        <div
+                          style={{
+                            background: "#f4f6f7",
+                            border: "1px solid #dce2e4",
+                            padding: "8px 10px",
+                            borderRadius: 6,
+                            fontSize: ".8rem",
+                            display: "flex",
+                            alignItems: "stretch",
+                            justifyContent: "space-between",
+                            gap: 14,
+                            flexWrap: "wrap",
+                            marginTop: 8,
+                          }}
+                        >
+                          <div style={{ flex: "1 1 220px" }}>
+                            Anticipo sugerido (70%):{" "}
+                            <strong>${sugerido.toFixed(2)}</strong>
                           </div>
-                          <div style={{ display:'flex', gap:6 }}>
-                            <button type="button" onClick={() => setForm({ ...form, anticipo: Number(sugerido.toFixed(2)) })} style={{ background:'#2980b9', color:'#fff', border:'none', padding:'6px 10px', borderRadius:4, cursor:'pointer' }}>Aplicar 70%</button>
-                            <button type="button" onClick={() => setForm({ ...form, anticipo: 0 })} style={{ background:'#7f8c8d', color:'#fff', border:'none', padding:'6px 10px', borderRadius:4, cursor:'pointer' }}>Dejar en 0</button>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm({
+                                  ...form,
+                                  anticipo: Number(sugerido.toFixed(2)),
+                                })
+                              }
+                              style={{
+                                background: "#2980b9",
+                                color: "#fff",
+                                border: "none",
+                                padding: "6px 10px",
+                                borderRadius: 4,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Aplicar 70%
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setForm({ ...form, anticipo: 0 })}
+                              style={{
+                                background: "#7f8c8d",
+                                color: "#fff",
+                                border: "none",
+                                padding: "6px 10px",
+                                borderRadius: 4,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Dejar en 0
+                            </button>
                           </div>
                         </div>
                       )}
@@ -2486,7 +2954,9 @@ const Sells = () => {
                         </div>
                         <div className="details-item">
                           <div className="details-label">Título</div>
-                          <div className="details-value">{cot.nombre || cot.titulo || "(sin título)"}</div>
+                          <div className="details-value">
+                            {cot.nombre || cot.titulo || "(sin título)"}
+                          </div>
                         </div>
                         <div className="details-item">
                           <div className="details-label">Cliente</div>
@@ -2553,23 +3023,76 @@ const Sells = () => {
                         </div>
                         <div className="details-item">
                           <div className="details-label">Subtotal</div>
-                          <div className="details-value">${(cot.subtotal || 0).toFixed ? cot.subtotal.toFixed(2) : Number(cot.subtotal || 0).toFixed(2)}</div>
+                          <div className="details-value">
+                            $
+                            {(cot.subtotal || 0).toFixed
+                              ? cot.subtotal.toFixed(2)
+                              : Number(cot.subtotal || 0).toFixed(2)}
+                          </div>
                         </div>
                         <div className="details-item">
                           <div className="details-label">IVA</div>
-                          <div className="details-value">${(cot.iva || 0).toFixed ? cot.iva.toFixed(2) : Number(cot.iva || 0).toFixed(2)} {cot.incluir_iva ? '(aplicado)' : '(no aplicado)'}</div>
+                          <div className="details-value">
+                            $
+                            {(cot.iva || 0).toFixed
+                              ? cot.iva.toFixed(2)
+                              : Number(cot.iva || 0).toFixed(2)}{" "}
+                            {cot.incluir_iva ? "(aplicado)" : "(no aplicado)"}
+                          </div>
                         </div>
                         <div className="details-item">
                           <div className="details-label">Progreso anticipo</div>
-                          <div className="details-value" style={{ minWidth: 140 }}>
+                          <div
+                            className="details-value"
+                            style={{ minWidth: 140 }}
+                          >
                             {(() => {
-                              const pct = total > 0 ? (anticipo / total) * 100 : 0;
+                              const pct =
+                                total > 0 ? (anticipo / total) * 100 : 0;
                               return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  <div style={{ height: 8, background: '#eee', borderRadius: 4, overflow: 'hidden' }}>
-                                    <div style={{ width: `${Math.min(100, pct).toFixed(2)}%`, background: pct >= 100 ? '#006d32' : pct >= 70 ? '#ff9800' : '#a30015', height: '100%' }} />
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 4,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      height: 8,
+                                      background: "#eee",
+                                      borderRadius: 4,
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: `${Math.min(100, pct).toFixed(
+                                          2
+                                        )}%`,
+                                        background:
+                                          pct >= 100
+                                            ? "#006d32"
+                                            : pct >= 70
+                                            ? "#ff9800"
+                                            : "#a30015",
+                                        height: "100%",
+                                      }}
+                                    />
                                   </div>
-                                  <span style={{ fontSize: '.75rem', color: '#444' }}>{pct.toFixed(2)}% {pct >= 100 ? 'LIQUIDADO' : pct >= 70 ? 'MÍNIMO OK' : 'FALTA ANTICIPO'}</span>
+                                  <span
+                                    style={{
+                                      fontSize: ".75rem",
+                                      color: "#444",
+                                    }}
+                                  >
+                                    {pct.toFixed(2)}%{" "}
+                                    {pct >= 100
+                                      ? "LIQUIDADO"
+                                      : pct >= 70
+                                      ? "MÍNIMO OK"
+                                      : "FALTA ANTICIPO"}
+                                  </span>
                                 </div>
                               );
                             })()}
@@ -2769,12 +3292,23 @@ const Sells = () => {
                         </button>
                       </div>
                       {/* Historial de anticipos */}
-                      <h3 style={{ marginTop: 22, marginBottom: 8, fontSize: '1.05rem' }}>Historial de anticipos</h3>
+                      <h3
+                        style={{
+                          marginTop: 22,
+                          marginBottom: 8,
+                          fontSize: "1.05rem",
+                        }}
+                      >
+                        Historial de anticipos
+                      </h3>
                       {anticiposHist.length === 0 ? (
                         <p>Sin anticipos registrados.</p>
                       ) : (
-                        <div style={{ overflowX: 'auto' }}>
-                          <table className="residuos-table" style={{ minWidth: 520 }}>
+                        <div style={{ overflowX: "auto" }}>
+                          <table
+                            className="residuos-table"
+                            style={{ minWidth: 520 }}
+                          >
                             <thead>
                               <tr>
                                 <th>Fecha</th>
@@ -2786,34 +3320,74 @@ const Sells = () => {
                             <tbody>
                               {anticiposHist.map((a) => (
                                 <tr key={a.id}>
-                                  <td>{a.fecha ? new Date(a.fecha).toLocaleString('es-MX') : '-'}</td>
+                                  <td>
+                                    {a.fecha
+                                      ? new Date(a.fecha).toLocaleString(
+                                          "es-MX"
+                                        )
+                                      : "-"}
+                                  </td>
                                   <td>${Number(a.monto || 0).toFixed(2)}</td>
-                                  <td>{a.usuario || '-'}</td>
-                                  <td>{a.observaciones || '-'}</td>
+                                  <td>{a.usuario || "-"}</td>
+                                  <td>{a.observaciones || "-"}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
                       )}
-                      {anticiposMeta && (() => {
-                        const total = Number(anticiposMeta.total_orden || 0);
-                        const anticipoTot = Number(anticiposMeta.anticipo_total || 0);
-                        const pct = total > 0 ? (anticipoTot / total) : 0;
-                        let badgeText = 'No pagado';
-                        let badgeColor = '#c0392b';
-                        if (anticipoTot >= total && total > 0) { badgeText = 'Liquidado'; badgeColor = '#2ecc71'; }
-                        else if (pct >= 0.7) { badgeText = 'Anticipo ≥ 70%'; badgeColor = '#27ae60'; }
-                        else if (anticipoTot > 0) { badgeText = 'Pago parcial'; badgeColor = '#f39c12'; }
-                        return (
-                          <div style={{ marginTop: 10, fontSize: '.85rem', color: '#444', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                            <div>
-                              <strong>Anticipo total:</strong> ${anticipoTot.toFixed(2)} | <strong>Saldo pendiente:</strong> ${anticiposMeta.saldo_pendiente} de ${total.toFixed(2)}
+                      {anticiposMeta &&
+                        (() => {
+                          const total = Number(anticiposMeta.total_orden || 0);
+                          const anticipoTot = Number(
+                            anticiposMeta.anticipo_total || 0
+                          );
+                          const pct = total > 0 ? anticipoTot / total : 0;
+                          let badgeText = "No pagado";
+                          let badgeColor = "#c0392b";
+                          if (anticipoTot >= total && total > 0) {
+                            badgeText = "Liquidado";
+                            badgeColor = "#2ecc71";
+                          } else if (pct >= 0.7) {
+                            badgeText = "Anticipo ≥ 70%";
+                            badgeColor = "#27ae60";
+                          } else if (anticipoTot > 0) {
+                            badgeText = "Pago parcial";
+                            badgeColor = "#f39c12";
+                          }
+                          return (
+                            <div
+                              style={{
+                                marginTop: 10,
+                                fontSize: ".85rem",
+                                color: "#444",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div>
+                                <strong>Anticipo total:</strong> $
+                                {anticipoTot.toFixed(2)} |{" "}
+                                <strong>Saldo pendiente:</strong> $
+                                {anticiposMeta.saldo_pendiente} de $
+                                {total.toFixed(2)}
+                              </div>
+                              <span
+                                style={{
+                                  background: badgeColor,
+                                  color: "#fff",
+                                  padding: "3px 8px",
+                                  borderRadius: 6,
+                                  fontSize: ".8rem",
+                                }}
+                              >
+                                {badgeText}
+                              </span>
                             </div>
-                            <span style={{ background: badgeColor, color: '#fff', padding: '3px 8px', borderRadius: 6, fontSize: '.8rem' }}>{badgeText}</span>
-                          </div>
-                        );
-                      })()}
+                          );
+                        })()}
                     </div>
                   );
                 })()
@@ -2851,8 +3425,21 @@ const Sells = () => {
               <h2 style={{ fontSize: "1.1rem", marginBottom: 10 }}>
                 Venta confirmada (inventario no descontado automáticamente)
               </h2>
-              <div style={{ fontSize: '.8rem', lineHeight: 1.3, background:'#fffbe6', border:'1px solid #ffe58f', padding:'8px 10px', borderRadius:6 }}>
-                Esta confirmación solo actualizó el estado de la venta a <strong>{confirmSummary?.status_aplicado}</strong>. El inventario no fue modificado. Descuenta manualmente las piezas necesarias en la pantalla de inventario y registra cualquier residuo de forma manual.
+              <div
+                style={{
+                  fontSize: ".8rem",
+                  lineHeight: 1.3,
+                  background: "#fffbe6",
+                  border: "1px solid #ffe58f",
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                }}
+              >
+                Esta confirmación solo actualizó el estado de la venta a{" "}
+                <strong>{confirmSummary?.status_aplicado}</strong>. El
+                inventario no fue modificado. Descuenta manualmente las piezas
+                necesarias en la pantalla de inventario y registra cualquier
+                residuo de forma manual.
               </div>
               <div
                 style={{
