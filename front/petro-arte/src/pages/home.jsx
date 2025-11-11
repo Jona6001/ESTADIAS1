@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../App.css";
 import { useNavigate, useLocation } from "react-router-dom";
-import { FaUser, FaHome, FaBoxes, FaChartBar, FaReceipt } from "react-icons/fa";
+import { FaUser, FaHome, FaBoxes, FaChartBar, FaReceipt, FaUsers, FaMoneyCheckAlt, FaRecycle } from "react-icons/fa";
 
 const Home = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,6 +49,7 @@ const Home = () => {
 
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [stats, setStats] = useState({ clientes: 0, cotizaciones: 0, pendientes: 0, pagadas: 0, canceladas: 0 });
   const handleLogout = () => {
     setMenuOpen(false);
     setShowLogoutConfirm(true);
@@ -68,13 +69,35 @@ const Home = () => {
     navigate("/config");
   };
 
-  // Datos simulados para la UI
-  const recentSales = [
-    { id: "V-1023", cliente: "Cliente A", total: 2450.5, fecha: "2025-10-16 12:40" },
-    { id: "V-1022", cliente: "Cliente B", total: 1320.0, fecha: "2025-10-16 11:18" },
-    { id: "V-1021", cliente: "Cliente C", total: 980.0,  fecha: "2025-10-16 10:05" },
-    { id: "V-1020", cliente: "Cliente D", total: 1540.2, fecha: "2025-10-16 09:31" },
-  ];
+  // Cargar datos reales para panel rápido
+  useEffect(() => {
+    const fetchDash = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const authHeaders = token ? { Authorization: `Bearer ${token}`, Accept: "application/json" } : { Accept: "application/json" };
+        const [resClientes, resCots] = await Promise.all([
+          fetch("http://localhost:3000/clientes", { headers: authHeaders }),
+          fetch("http://localhost:3000/api/ordenes", { headers: authHeaders })
+        ]);
+        const toJson = async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return t; } };
+        const cData = await toJson(resClientes);
+        const oData = await toJson(resCots);
+        const clientesArr = Array.isArray(cData) ? cData : cData?.clientes || [];
+        const cotArr = Array.isArray(oData?.data) ? oData.data : Array.isArray(oData) ? oData : [];
+        const pendientes = cotArr.filter(c => (c.status||"").toLowerCase()==="pendiente").length;
+        const pagadas = cotArr.filter(c => (c.status||"").toLowerCase()==="pagado").length;
+        const canceladas = cotArr.filter(c => (c.status||"").toLowerCase()==="cancelado").length;
+        setStats({ clientes: clientesArr.length, cotizaciones: cotArr.length, pendientes, pagadas, canceladas });
+        const sorted = [...cotArr].sort((a,b) => new Date(b.fecha_creacion||b.fecha||0) - new Date(a.fecha_creacion||a.fecha||0));
+        setRecentSales(sorted.slice(0,5));
+      } catch {
+        // silencioso
+      }
+    };
+    fetchDash();
+  }, []);
+
+  const [recentSales, setRecentSales] = useState([]);
 
   const chartData = [
     { label: "Lun", value: 12 },
@@ -86,6 +109,15 @@ const Home = () => {
     { label: "Dom", value: 7 },
   ];
   const maxValue = Math.max(...chartData.map(d => d.value)) || 1;
+
+  // Role
+  let isAdmin = false;
+  try {
+    const userObj = JSON.parse(localStorage.getItem("user")||"{}");
+    isAdmin = String(userObj?.rol||"").toLowerCase()==="admin";
+  } catch {
+    // ignore
+  }
 
   return (
     <div className="home-bg">
@@ -112,7 +144,9 @@ const Home = () => {
               <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
               <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
               <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
-              <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+              {isAdmin && (
+                <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+              )}
             </div>
           </div>
 
@@ -122,7 +156,7 @@ const Home = () => {
             <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
             <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
             <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
-            <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+            {isAdmin && <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>}
           </div>
 
           {/* Derecha: fecha/hora + usuario */}
@@ -164,19 +198,42 @@ const Home = () => {
 
       {/* Dashboard Home */}
       <main className="home-dashboard">
-        {/* Izquierda: botón Inventario */}
-        <section className="home-left">
-          <button
-            className="home-card home-card-action inventory-card"
-            onClick={() => navigate("/inventario")}
-            title="Ir a Inventario"
-          >
-            <span className="home-card-icon"><FaBoxes size={28} /></span>
-            <div className="home-card-text">
-              <h3>Inventario</h3>
-              <p>Administrar productos y existencias</p>
-            </div>
-          </button>
+        {/* Accesos rápidos */}
+        <section className="home-left" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:16 }}>
+            <button className="home-card home-card-action inventory-card" onClick={() => navigate("/inventario")} title="Inventario">
+              <span className="home-card-icon"><FaBoxes size={26} /></span>
+              <div className="home-card-text"><h3>Inventario</h3><p>{stats.cotizaciones>0?`Productos activos`:'Administrar productos'}</p></div>
+            </button>
+            <button className="home-card home-card-action" onClick={() => navigate("/ventas")} title="Ventas" style={{ background:'#fff' }}>
+              <span className="home-card-icon"><FaMoneyCheckAlt size={26} /></span>
+              <div className="home-card-text"><h3>Ventas</h3><p>{stats.cotizaciones} cotizaciones</p></div>
+            </button>
+            <button className="home-card home-card-action" onClick={() => navigate("/clientes")} title="Clientes" style={{ background:'#fff' }}>
+              <span className="home-card-icon"><FaUsers size={26} /></span>
+              <div className="home-card-text"><h3>Clientes</h3><p>{stats.clientes} registrados</p></div>
+            </button>
+            <button className="home-card home-card-action" onClick={() => navigate("/residuos")} title="Residuos" style={{ background:'#fff' }}>
+              <span className="home-card-icon"><FaRecycle size={26} /></span>
+              <div className="home-card-text"><h3>Residuos</h3><p>Control sobrantes</p></div>
+            </button>
+            {isAdmin && (
+              <button className="home-card home-card-action" onClick={() => navigate("/usuarios")} title="Usuarios" style={{ background:'#fff' }}>
+                <span className="home-card-icon"><FaUser size={26} /></span>
+                <div className="home-card-text"><h3>Usuarios</h3><p>Gestión de roles</p></div>
+              </button>
+            )}
+          </div>
+          {/* Mini resumen de estados */}
+          <div className="card stats-card" style={{ marginTop:8 }}>
+            <div className="card-header"><FaChartBar size={18} /><h4>Resumen rápido</h4></div>
+            <ul style={{ listStyle:'none', padding:0, margin:0, display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:8 }}>
+              <li className="mini-stat"><strong>Total</strong><div>{stats.cotizaciones}</div></li>
+              <li className="mini-stat"><strong>Pendientes</strong><div>{stats.pendientes}</div></li>
+              <li className="mini-stat"><strong>Pagadas</strong><div>{stats.pagadas}</div></li>
+              <li className="mini-stat"><strong>Canceladas</strong><div>{stats.canceladas}</div></li>
+            </ul>
+          </div>
         </section>
 
         {/* Derecha: Ventas recientes (arriba) + Estadísticas (abajo) */}
@@ -187,20 +244,19 @@ const Home = () => {
               <h4>Ventas recientes</h4>
             </div>
             <ul className="sales-list">
+              {recentSales.length === 0 && <li style={{ padding:'0.5rem', color:'#666' }}>Sin datos recientes</li>}
               {recentSales.map(s => (
                 <li key={s.id} className="sale-item">
                   <div className="sale-left">
                     <span className="sale-icon"><FaReceipt size={16} /></span>
                     <div className="sale-meta">
                       <strong>{s.id}</strong>
-                      <span>{s.cliente}</span>
+                      <span>{s.cliente || s.Cliente?.nombre || '—'}</span>
                     </div>
                   </div>
                   <div className="sale-right">
-                    <span className="sale-amount">
-                      ${s.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className="sale-date">{s.fecha}</span>
+                    <span className="sale-amount">${Number(s.total||s.subtotal||0).toLocaleString("es-MX", { minimumFractionDigits:2 })}</span>
+                    <span className="sale-date">{new Date(s.fecha_creacion||s.fecha||Date.now()).toLocaleDateString('es-MX')}</span>
                   </div>
                 </li>
               ))}

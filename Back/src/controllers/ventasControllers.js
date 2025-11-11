@@ -39,6 +39,30 @@ const crearOrden = async (req, res) => {
       });
     }
 
+    // Si no se enviaron nuevos productos pero sí cambió incluir_iva o se desea forzar recálculo, recalcular totales con los productos actuales
+    if (productos === undefined && incluir_iva !== undefined) {
+      const actuales = await VentasProductos.findAll({
+        where: { cotizacionId: id },
+        include: [{ model: Producto, attributes: ["ID", "cantidad_m2", "medida_por_unidad"] }],
+      });
+      let subtotalCalc = 0;
+      for (const it of actuales) {
+        const precioM2 = Number(it.Producto?.cantidad_m2 || 0);
+        const m2 = it.cantidad_m2_calculada != null
+          ? Number(it.cantidad_m2_calculada)
+          : it.tipo_medida === "m2"
+          ? Number(it.cantidad || 0)
+          : Number(it.Producto?.medida_por_unidad || 0) * Number(it.cantidad || 0);
+        subtotalCalc += precioM2 * m2;
+      }
+      subtotalCalc = parseFloat(subtotalCalc.toFixed(2));
+      const ivaCalc = incluir_iva ? parseFloat((subtotalCalc * 0.16).toFixed(2)) : 0;
+      const totalCalc = parseFloat((subtotalCalc + ivaCalc).toFixed(2));
+      orden.subtotal = subtotalCalc;
+      orden.iva = ivaCalc;
+      orden.total = totalCalc;
+    }
+
     // Verificar que el usuario exista
     const usuarioExiste = await Usuario.findByPk(ID_usuario);
     if (!usuarioExiste) {
@@ -215,9 +239,43 @@ const obtenerOrdenes = async (req, res) => {
       order: [["fecha_creacion", "DESC"]],
     });
 
+    // Enriquecer con metadatos de anticipos: conteo y último abono
+    const enriched = await Promise.all(
+      ordenes.map(async (o) => {
+        try {
+          const cotizacionId = o.ID;
+          const abonos_count = await HistorialAnticipos.count({
+            where: { cotizacionId },
+          });
+          let ultimo_abono_fecha = null;
+          let ultimo_abono_monto = null;
+          if (abonos_count > 0) {
+            const ultimo = await HistorialAnticipos.findOne({
+              where: { cotizacionId },
+              order: [["fecha", "DESC"]],
+            });
+            if (ultimo) {
+              ultimo_abono_fecha = ultimo.fecha || ultimo.createdAt || null;
+              ultimo_abono_monto = ultimo.monto || null;
+            }
+          }
+          const obj = o.toJSON();
+          return {
+            ...obj,
+            abonos_count,
+            ultimo_abono_fecha,
+            ultimo_abono_monto,
+          };
+        } catch (e) {
+          // En caso de error al enriquecer, devolver sin meta para no romper la lista
+          return o;
+        }
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      data: ordenes,
+      data: enriched,
     });
   } catch (error) {
     console.error("Error al obtener órdenes:", error);
@@ -289,10 +347,18 @@ const actualizarStatusOrden = async (req, res) => {
     const { status } = req.body;
 
     // Validar que el status sea válido
-    if (!["pendiente", "pagado", "cancelado"].includes(status)) {
+    if (![
+      "pendiente",
+      "pagado",
+      "cancelado",
+      "en_proceso",
+      "terminado",
+      "entregado_pagopendiente",
+    ].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Status inválido. Debe ser: pendiente, pagado o cancelado",
+        message:
+          "Status inválido. Debe ser: pendiente, pagado, cancelado, en_proceso, terminado o entregado_pagopendiente",
       });
     }
 
@@ -401,7 +467,8 @@ const actualizarAnticipo = async (req, res) => {
 const actualizarOrden = async (req, res) => {
   try {
     const { id } = req.params;
-    const { ID_cliente, productos, anticipo, status } = req.body;
+    // Aceptar campos adicionales para permitir edición completa (nombre, incluir_iva)
+    const { ID_cliente, productos, anticipo, status, nombre, incluir_iva } = req.body;
 
     const orden = await Cotizacion.findByPk(id);
     if (!orden) {
@@ -411,12 +478,12 @@ const actualizarOrden = async (req, res) => {
       });
     }
 
-    // Bloquear cambios de productos si la orden no está 'pendiente'
-    if (orden.status !== "pendiente" && req.body.productos !== undefined) {
+    // Permitir modificar productos SOLO cuando la orden está 'pendiente'.
+    if (req.body.productos !== undefined && orden.status !== "pendiente") {
       return res.status(400).json({
         success: false,
         message:
-          "No se pueden modificar productos en una orden que no está 'pendiente'. Duplique la cotización para continuar.",
+          "Solo se pueden modificar productos cuando el estado es 'pendiente'. Cambie el estado a 'pendiente' o duplique la cotización para continuar.",
       });
     }
 
@@ -432,6 +499,14 @@ const actualizarOrden = async (req, res) => {
       orden.ID_cliente = ID_cliente;
     }
 
+    // Permitir actualizar nombre/incluir_iva aunque no cambien productos
+    if (typeof nombre === "string" && nombre.trim().length > 0) {
+      orden.nombre = nombre.trim();
+    }
+    if (typeof incluir_iva === "boolean") {
+      orden.incluir_iva = incluir_iva;
+    }
+
     // Reemplazar productos si se envían
     if (productos !== undefined) {
       if (!Array.isArray(productos) || productos.length === 0) {
@@ -445,13 +520,23 @@ const actualizarOrden = async (req, res) => {
       //    a) Cargar productos actuales y sumar m2 por productoId
       const actuales = await VentasProductos.findAll({
         where: { cotizacionId: id },
+        include: [{ model: Producto, attributes: ["ID", "medida_por_unidad"] }],
       });
       const m2ActualPorProducto = new Map();
       for (const vp of actuales) {
         const key = vp.productoId;
+        // Para registros previos que no tenían total_m2, derivar de tipo_medida
+        let derivadoM2 = 0;
+        if (vp.tipo_medida === "m2") {
+          derivadoM2 = Number(vp.cantidad || 0);
+        } else if (vp.tipo_medida === "piezas") {
+          // Convertir piezas a m2 usando medida_por_unidad si existe
+          const m2PorPieza = Number(vp.Producto?.medida_por_unidad || 0);
+            derivadoM2 = m2PorPieza > 0 ? Number(vp.cantidad || 0) * m2PorPieza : 0;
+        }
         m2ActualPorProducto.set(
           key,
-          (m2ActualPorProducto.get(key) || 0) + Number(vp.total_m2 || 0)
+          (m2ActualPorProducto.get(key) || 0) + (Number(vp.total_m2) || derivadoM2)
         );
       }
 
@@ -462,18 +547,10 @@ const actualizarOrden = async (req, res) => {
       for (const p of productos) {
         const {
           productoId,
-          cantidad = 1,
-          tipoFigura,
-          base,
-          altura,
-          radio,
-          base2,
-          altura2,
-          soclo_base,
-          soclo_altura,
-          cubierta_base,
-          cubierta_altura,
+          cantidad = 1, // Para modo simple (m2) representa directamente los m²
+          // Se ignoran campos de figuras si llegan: base, altura, etc. El modo figura queda desactivado.
           descripcion,
+          tipo_medida, // esperado 'm2'
         } = p;
 
         const productoExiste = await Producto.findByPk(productoId);
@@ -483,60 +560,13 @@ const actualizarOrden = async (req, res) => {
             message: `No se encontró el producto con ID: ${productoId}`,
           });
         }
-        if (!tipoFigura) {
-          return res.status(400).json({
-            success: false,
-            message: "Cada producto debe tener un tipoFigura especificado",
-          });
-        }
+        // Modo A: Edición simple por m² (sin figuras). Se acepta productoId + cantidad(m2) + tipo_medida='m2'
+        const modoSimpleM2 = tipo_medida === "m2"; // siempre usamos modo simple
 
-        // Calcular m2_por_pieza con mismas reglas que en creación
-        let m2_por_pieza = 0;
-        if (tipoFigura === "circulo") {
-          if (!radio) {
-            return res.status(400).json({
-              success: false,
-              message: `El producto con ID ${productoId} requiere 'radio' para el tipo círculo`,
-            });
-          }
-          m2_por_pieza += Math.PI * Math.pow(radio, 2);
-        } else if (tipoFigura === "ovalo") {
-          if (!base || !altura) {
-            return res.status(400).json({
-              success: false,
-              message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el tipo óvalo`,
-            });
-          }
-          m2_por_pieza += Math.PI * (base / 2) * (altura / 2);
-        } else if (tipoFigura === "L" || tipoFigura === "L invertida") {
-          if (!base || !altura) {
-            return res.status(400).json({
-              success: false,
-              message: `El producto con ID ${productoId} requiere 'base' y 'altura' para el primer rectángulo de la L`,
-            });
-          }
-          if (!base2 || !altura2) {
-            return res.status(400).json({
-              success: false,
-              message: `El producto con ID ${productoId} requiere 'base2' y 'altura2' para el segundo rectángulo de la L`,
-            });
-          }
-          m2_por_pieza += base * altura + base2 * altura2;
-        } else {
-          if (!base || !altura) {
-            return res.status(400).json({
-              success: false,
-              message: `El producto con ID ${productoId} requiere 'base' y 'altura'`,
-            });
-          }
-          m2_por_pieza += base * altura;
-        }
-        if (soclo_base && soclo_altura)
-          m2_por_pieza += soclo_base * soclo_altura;
-        if (cubierta_base && cubierta_altura)
-          m2_por_pieza += cubierta_base * cubierta_altura;
+        let total_m2 = 0;
+        // Modo simple: cantidad son m² directos
+        total_m2 = Number(cantidad || 0);
 
-        const total_m2 = m2_por_pieza * Number(cantidad || 1);
         const subtotal = total_m2 * productoExiste.cantidad_m2;
         totalCotizacion += subtotal;
 
@@ -550,18 +580,9 @@ const actualizarOrden = async (req, res) => {
         detalleNuevos.push({
           productoId,
           cantidad: Number(cantidad || 1),
-          tipoFigura,
-          base: base || null,
-          altura: altura || null,
-          radio: radio || null,
-          base2: base2 || null,
-          altura2: altura2 || null,
-          soclo_base: soclo_base || null,
-          soclo_altura: soclo_altura || null,
-          cubierta_base: cubierta_base || null,
-          cubierta_altura: cubierta_altura || null,
           total_m2: parseFloat(Number(total_m2).toFixed(4)),
           descripcion: descripcion || null,
+          tipo_medida: "m2",
         });
       }
 
@@ -669,14 +690,20 @@ const actualizarOrden = async (req, res) => {
         productosNuevos.push(vp);
       }
 
-      orden.total = parseFloat(totalCotizacion.toFixed(2));
+  // Recalcular subtotal/iva/total con bandera incluir_iva
+  const subtotalCalc = parseFloat(totalCotizacion.toFixed(2));
+  const ivaCalc = orden.incluir_iva ? parseFloat((subtotalCalc * 0.16).toFixed(2)) : 0;
+  const totalCalc = parseFloat((subtotalCalc + ivaCalc).toFixed(2));
+  orden.subtotal = subtotalCalc;
+  orden.iva = ivaCalc;
+  orden.total = totalCalc;
 
       // Guardar marca de ajuste en memoria de la request para retornarla
       req._ajusteInventarioAplicado = ajusteInventarioAplicado;
       req._ajustesResumen = ajustes;
     }
 
-    // Actualizar anticipo si se envía
+    // Actualizar anticipo si se envía (validando contra total recalculado)
     if (anticipo !== undefined) {
       if (isNaN(anticipo) || Number(anticipo) < 0) {
         return res.status(400).json({
@@ -698,10 +725,10 @@ const actualizarOrden = async (req, res) => {
 
     // Actualizar status si se envía
     if (status !== undefined) {
-      if (!["pendiente", "pagado", "cancelado"].includes(status)) {
+      if (!["pendiente", "pagado", "cancelado", "en_proceso", "terminado", "entregado_pagopendiente"].includes(status)) {
         return res.status(400).json({
           success: false,
-          message: "Status inválido. Debe ser: pendiente, pagado o cancelado",
+          message: "Status inválido. Debe ser uno de: pendiente, pagado, cancelado, en_proceso, terminado, entregado_pagopendiente",
         });
       }
       orden.status = status;
@@ -770,13 +797,13 @@ const calcularInventarioNecesario = async (req, res) => {
       });
     }
 
-    // Verificar que tenga al menos 50% de anticipo
+    // Verificar que tenga al menos 70% de anticipo
     const porcentajeAnticipo =
       (parseFloat(orden.anticipo) / parseFloat(orden.total)) * 100;
-    if (porcentajeAnticipo < 50) {
+    if (porcentajeAnticipo < 70) {
       return res.status(400).json({
         success: false,
-        message: `Se requiere al menos 50% de anticipo para procesar inventario. Anticipo actual: ${porcentajeAnticipo.toFixed(
+        message: `Se requiere al menos 70% de anticipo para procesar inventario. Anticipo actual: ${porcentajeAnticipo.toFixed(
           2
         )}%`,
         porcentaje_actual: porcentajeAnticipo.toFixed(2),
@@ -808,7 +835,14 @@ const calcularInventarioNecesario = async (req, res) => {
       }
 
       // Calcular cuántas piezas se necesitan
-      const m2Necesarios = item.total_m2;
+      const m2Necesarios =
+        item.total_m2 != null
+          ? Number(item.total_m2)
+          : item.cantidad_m2_calculada != null
+          ? Number(item.cantidad_m2_calculada)
+          : item.tipo_medida === "m2"
+          ? Number(item.cantidad || 0)
+          : Number(producto.medida_por_unidad || 0) * Number(item.cantidad || 0);
       const m2PorPieza = producto.medida_por_unidad;
 
       if (m2PorPieza <= 0) {
@@ -869,7 +903,7 @@ const calcularInventarioNecesario = async (req, res) => {
         total: parseFloat(orden.total),
         porcentaje_anticipo: parseFloat(porcentajeAnticipo.toFixed(2)),
         puede_confirmar:
-          porcentajeAnticipo >= 50 && inventarioInsuficiente.length === 0,
+          porcentajeAnticipo >= 70 && inventarioInsuficiente.length === 0,
         productos: analisisInventario,
         errores_inventario:
           inventarioInsuficiente.length > 0
@@ -920,14 +954,14 @@ const confirmarInventario = async (req, res) => {
       });
     }
 
-    // Verificar anticipo ≥ 50%
+    // Verificar anticipo ≥ 70%
     const porcentajeAnticipo =
       (parseFloat(orden.anticipo) / parseFloat(orden.total)) * 100;
-    if (porcentajeAnticipo < 50) {
+    if (porcentajeAnticipo < 70) {
       return res.status(400).json({
         success: false,
         message:
-          "Se requiere al menos 50% de anticipo para confirmar inventario",
+          "Se requiere al menos 70% de anticipo para confirmar inventario",
         porcentaje_actual: porcentajeAnticipo.toFixed(2),
       });
     }
@@ -967,7 +1001,14 @@ const confirmarInventario = async (req, res) => {
         });
       }
 
-      const m2Necesarios = item.total_m2;
+      const m2Necesarios =
+        item.total_m2 != null
+          ? Number(item.total_m2)
+          : item.cantidad_m2_calculada != null
+          ? Number(item.cantidad_m2_calculada)
+          : item.tipo_medida === "m2"
+          ? Number(item.cantidad || 0)
+          : Number(producto.medida_por_unidad || 0) * Number(item.cantidad || 0);
       const m2PorPieza = producto.medida_por_unidad;
       const piezasNecesariasExactas = m2Necesarios / m2PorPieza;
       const piezasNecesarias = Math.ceil(piezasNecesariasExactas);
@@ -1204,108 +1245,227 @@ const generarFacturaPDF = async (req, res) => {
     const nombreArchivo = `factura_${id}_${Date.now()}.pdf`;
     const rutaArchivo = path.join(facturasDir, nombreArchivo);
 
-    // Crear el documento PDF
-    const doc = new PDFDocument({ margin: 50 });
+  // Crear el documento PDF (tamaño carta por defecto). Márgenes moderados.
+  const doc = new PDFDocument({ margin: 40 });
     const stream = fs.createWriteStream(rutaArchivo);
     doc.pipe(stream);
 
     // Color guinda para líneas
     const colorGuinda = "#8B1818";
 
-    // --- ENCABEZADO ---
-    // Agregar logo
-    const logoPath = path.join(
-      __dirname,
-      "../../front/petro-arte/src/assets/logo-petro.png"
-    );
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 50, 45, { width: 120 }); // Ajusta el width según necesites
+    // --- ENCABEZADO NUEVO (estilo cotización) ---
+  // Logo: preferir imágenes en Back/img, con fallback al asset del front
+  const logoPathPrimary = path.join(__dirname, "../../img/LOGO.png");
+  const logoPathAlt = path.join(__dirname, "../../img/logo.jpg");
+  const logoPathFront = path.join(__dirname, "../../front/petro-arte/src/assets/logo-petro.png");
+  const logoPath = fs.existsSync(logoPathPrimary)
+    ? logoPathPrimary
+    : fs.existsSync(logoPathAlt)
+    ? logoPathAlt
+    : logoPathFront;
+  // Utilidad para truncar texto manteniendo ancho
+  const truncateToWidth = (text, maxWidth, fontSize = 12, fontName = 'Helvetica-Bold') => {
+    if (!text) return '';
+    doc.font(fontName).fontSize(fontSize);
+    if (doc.widthOfString(text) <= maxWidth) return text;
+    let truncated = text;
+    while (truncated.length > 0 && doc.widthOfString(truncated + '…') > maxWidth) {
+      truncated = truncated.slice(0, -1);
     }
+    return truncated + '…';
+  };
+  // Datos de contacto de la EMPRESA (no del vendedor)
+  const COMPANY_PHONE = process.env.COMPANY_PHONE || '6181295414';
+  const COMPANY_EMAIL = process.env.COMPANY_EMAIL || 'petro_arte08@hotmail.com';
+  const COMPANY_WEBSITE = process.env.COMPANY_WEBSITE || 'petroarte.com';
+  const COMPANY_ADDRESS = process.env.COMPANY_ADDRESS || 'Durango, México';
+  if (fs.existsSync(logoPath)) {
+    doc.image(logoPath, 40, 35, { width: 90 });
+  }
+    // Datos de contacto (parte superior derecha)
+  // Reacomodar layout más a la izquierda y compacto
+  const colLeftX = 170; // antes 300
+  const colRightX = 360; // antes 460
+  const rowH = 22;
+  const iconSize = 16;
+  // Usar nombres reales agregados por el usuario con espacios
+  const iconPhone = path.join(__dirname, "../../img/cell icon.png");
+  const iconMail = path.join(__dirname, "../../img/email icon.png");
+  const iconWeb = path.join(__dirname, "../../img/web icon.png");
+  const iconLoc = path.join(__dirname, "../../img/location icon.png");
 
-    // Información del documento a la derecha del logo
-    doc.fontSize(20).text("FACTURA / COTIZACIÓN", 200, 50, { align: "right" });
-    doc
-      .fontSize(10)
-      .text(`No. Orden: ${orden.ID}`, 200, 80, { align: "right" });
-    doc.text(
-      `Fecha: ${new Date(orden.fecha_creacion).toLocaleDateString("es-MX")}`,
-      200,
-      95,
-      { align: "right" }
-    );
-    doc.moveDown(2);
+    const iconCircleR = 8.5;
+    const drawFallbackIcon = (x, y, glyph) => {
+      doc.save();
+      doc.fillColor(colorGuinda).circle(x + iconCircleR, y + iconCircleR, iconCircleR).fill();
+      doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(iconCircleR + 3).text(glyph, x, y + 1, {
+        width: iconCircleR * 2,
+        align: 'center',
+      });
+      doc.restore();
+    };
+    const renderIcon = (imgPath, x, y, glyph) => {
+      if (fs.existsSync(imgPath)) {
+        doc.image(imgPath, x, y, { width: iconSize, height: iconSize });
+      } else {
+        drawFallbackIcon(x, y, glyph);
+      }
+    };
 
-    // Línea separadora con color guinda
-    doc
-      .strokeColor(colorGuinda)
-      .lineWidth(1)
-      .moveTo(50, 120)
-      .lineTo(550, 120)
-      .stroke();
+    // Helper para imprimir label + valor compactado: si el valor excede ancho, lo coloca debajo
+    // Reduce texto para que quepa en una sola línea si es necesario
+    const shrinkToWidth = (text, targetWidth, startSize = 11, minSize = 8, fontName = 'Helvetica') => {
+      let size = startSize;
+      doc.font(fontName).fontSize(size);
+      if (doc.widthOfString(text) <= targetWidth) return size;
+      while (size > minSize && doc.widthOfString(text) > targetWidth) {
+        size -= 1;
+        doc.fontSize(size);
+      }
+      return size; // tamaño final usado (puede seguir desbordando, se puede truncar si se desea)
+    };
+
+    const printLabelValue = (label, value, xBase, yBase, maxWidthValue, opts = {}) => {
+      const labelX = xBase + iconSize + 8;
+      const valueInlineX = labelX + 70; // posición para valor en misma línea
+      doc.fontSize(10).fillColor('#444').text(label, labelX, yBase);
+      doc.fillColor('#000');
+
+      const { stackBelow = false, shrinkSingleLine = false } = opts;
+
+      if (shrinkSingleLine) {
+        // Intentar que quepa en una sola línea reduciendo tamaño
+        const finalSize = shrinkToWidth(value, maxWidthValue, 11, 8);
+        doc.fontSize(finalSize);
+      } else {
+        doc.fontSize(11);
+      }
+
+      if (!stackBelow) {
+        // imprimir en la misma línea si cabe, si no stack
+        if (doc.widthOfString(value) <= maxWidthValue) {
+          doc.text(value, valueInlineX, yBase, { width: maxWidthValue });
+          return yBase + rowH;
+        } else {
+          const wrappedHeight = doc.heightOfString(value, { width: maxWidthValue });
+          doc.text(value, labelX, yBase + 12, { width: maxWidthValue });
+          return yBase + 12 + wrappedHeight + 6;
+        }
+      } else {
+        // Siempre debajo del label
+        const wrappedHeight = doc.heightOfString(value, { width: maxWidthValue });
+        doc.text(value, labelX, yBase + 12, { width: maxWidthValue });
+        return yBase + 12 + wrappedHeight + 6;
+      }
+    };
+
+    let contactYLeft = 40;
+    renderIcon(iconPhone, colLeftX, contactYLeft, '☎');
+    contactYLeft = printLabelValue('Teléfono', COMPANY_PHONE, colLeftX, contactYLeft, 110);
+    renderIcon(iconWeb, colLeftX, contactYLeft, '🌐');
+    contactYLeft = printLabelValue('Sitio Web', COMPANY_WEBSITE, colLeftX, contactYLeft, 110);
+
+    let contactYRight = 40;
+    renderIcon(iconMail, colRightX, contactYRight, '✉');
+  // Email: intentar que no se parta (shrinkSingleLine) para reducir altura y subir ubicación
+  contactYRight = printLabelValue('Email', COMPANY_EMAIL, colRightX, contactYRight, 130, { shrinkSingleLine: true });
+    renderIcon(iconLoc, colRightX, contactYRight, '⌖');
+  // Ubicación: permitir stack si es muy larga (pero normalmente cabe)
+  contactYRight = printLabelValue('Ubicación', COMPANY_ADDRESS, colRightX, contactYRight, 130, { stackBelow: false });
+
+    // Ajustar cinta y título si el bloque creció mucho
+    const headerBottom = Math.max(contactYLeft, contactYRight);
+    const titleBaseY = headerBottom + 10; // mover la cinta debajo del bloque
+
+    // Reposicionar el título y cinta (sobrescribiendo la versión previa)
+    // Limpiar área original (opcional: se deja tal cual porque aún no se había dibujado la cinta en este punto)
+
+    // Encabezado principal (COTIZACIÓN) reubicado más a la derecha y alineado con la fila de datos
+    // Se dibuja después de calcular titleBaseY para evitar que obstruya el bloque de contacto.
+
+    // Cinta / barra de asunto (tomada del título/nombre de la orden)
+    // Generar título dinámico: usa orden.nombre si existe, si no toma primer producto.
+    let tituloCotizacion = 'COTIZACIÓN';
+    if (orden.nombre && String(orden.nombre).trim().length > 0) {
+      tituloCotizacion = String(orden.nombre).trim();
+    } else if (productosOrden[0] && productosOrden[0].Producto && productosOrden[0].Producto.nombre) {
+      tituloCotizacion = `SUMINISTRO Y COLOCACIÓN DE ${productosOrden[0].Producto.nombre}`;
+    }
+    tituloCotizacion = tituloCotizacion.toUpperCase();
+  const titleBoxWidth = 300;
+  let titleFontSize = 12;
+  doc.font('Helvetica-Bold').fontSize(titleFontSize);
+  if (doc.widthOfString(tituloCotizacion) > titleBoxWidth) {
+    while (titleFontSize > 8 && doc.widthOfString(tituloCotizacion) > titleBoxWidth) {
+      titleFontSize -= 1;
+      doc.fontSize(titleFontSize);
+    }
+    if (doc.widthOfString(tituloCotizacion) > titleBoxWidth) {
+      tituloCotizacion = truncateToWidth(tituloCotizacion, titleBoxWidth, titleFontSize, 'Helvetica-Bold');
+    }
+  }
+  doc.rect(40, titleBaseY, 300, 26).fill(colorGuinda).stroke(); // ligeramente más estrecha
+  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(titleFontSize).text(tituloCotizacion, 50, titleBaseY + 6, { width: 280 });
+  // Badge "DATOS" a la derecha (reposicionado)
+  const badgeX = 350;
+  doc.fillColor(colorGuinda).rect(badgeX, titleBaseY, 70, 20).fill();
+  doc.fillColor('#FFFFFF').fontSize(10).text('DATOS', badgeX, titleBaseY + 4, { width: 70, align: 'center' });
+  // Título superior derecho "COTIZACIÓN" más pequeño y en la parte alta para no obstruir
+  doc.fillColor('#000000').font('Helvetica-Bold').fontSize(18).text('COTIZACIÓN', 0, 20, { align: 'right' });
+  doc.fillColor('#000000');
+
+    // Datos clave folio / vendedor / fecha
+  // Reorganizar: a la izquierda FOLIO/VENDEDOR/FECHA; a la derecha (bajo "DATOS") bloque del cliente
+  const metaY = titleBaseY + 28; // ligeramente más cerca del ribbon
+  // Ajuste de columnas: vendedor un poco más a la izquierda y fecha más a la derecha
+  const col1X = 40; const col2X = 145; const col3X = 305;
+  const valOffset = 55;
+  // Fila izquierda (coincide con la referencia)
+  doc.fontSize(10).fillColor('#555').text('FOLIO', col1X, metaY);
+  doc.fontSize(11).fillColor('#000').text(`${orden.ID}`, col1X + valOffset, metaY);
+  doc.fontSize(10).fillColor('#555').text('Vendedor', col2X, metaY);
+  doc.fontSize(11).fillColor('#000').text(`${orden.Usuario.nombre}`, col2X + valOffset, metaY);
+  doc.fontSize(10).fillColor('#555').text('Fecha', col3X, metaY);
+  doc.fontSize(11).fillColor('#000').text(`${new Date(orden.fecha_creacion).toLocaleDateString('es-MX')}`, col3X + valOffset, metaY);
+
+  // Bloque del cliente bajo "DATOS" en la columna derecha
+  const clientBlockX = 430; // columna derecha
+  const clientBlockW = 120;
+  const nombreCliente = (orden.Cliente && orden.Cliente.nombre ? String(orden.Cliente.nombre) : '---').toUpperCase();
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#222').text(nombreCliente, clientBlockX, titleBaseY + 2, { width: clientBlockW });
+  let clientY = doc.y;
+  const dirCliente = (orden.Cliente && orden.Cliente.direccion) ? orden.Cliente.direccion : '---';
+  doc.font('Helvetica').fontSize(8).fillColor('#666').text(dirCliente, clientBlockX, clientY + 2, { width: clientBlockW });
+  clientY = doc.y;
+  const rfcCliente = (orden.Cliente && orden.Cliente.rfc) ? orden.Cliente.rfc : '---';
+  doc.font('Helvetica').fontSize(8).fillColor('#666').text(`RFC: ${rfcCliente}`, clientBlockX, clientY + 2, { width: clientBlockW });
+  const clientBlockBottom = doc.y;
+
+  // Línea separadora: bajo el bloque más alto (izquierda o derecha)
+  const sepY = Math.max(metaY + 40, clientBlockBottom + 6);
+  doc.strokeColor('#CCCCCC').lineWidth(1).moveTo(40, sepY).lineTo(560, sepY).stroke();
     doc.moveDown(1);
 
-    // --- INFORMACIÓN DEL CLIENTE ---
-    doc
-      .fontSize(14)
-      .fillColor("#000000")
-      .text("DATOS DEL CLIENTE", { underline: true });
-    doc.moveDown(0.5);
-    doc.fontSize(10);
-    doc.text(`Nombre: ${orden.Cliente.nombre}`);
-    doc.text(`Teléfono: ${orden.Cliente.telefono || "N/A"}`);
-    doc.text(`RFC: ${orden.Cliente.rfc || "N/A"}`);
-    doc.text(`Dirección: ${orden.Cliente.direccion || "N/A"}`);
-    doc.moveDown(1);
+    // Se omite el bloque original de cliente/vendedor porque ya se mostraron arriba.
 
-    // --- INFORMACIÓN DEL VENDEDOR ---
-    doc.fontSize(14).text("VENDEDOR", { underline: true });
-    doc.moveDown(0.5);
-    doc.fontSize(10);
-    doc.text(`Nombre: ${orden.Usuario.nombre}`);
-    doc.text(`Teléfono: ${orden.Usuario.telefono || "N/A"}`);
-    doc.text(`Correo: ${orden.Usuario.correo}`);
-    doc.moveDown(1.5);
+    // --- DETALLES ---
+  doc.fontSize(12).fillColor('#000').text('DETALLE DE PRODUCTOS', 40, doc.y + 8);
+  const tableTop = doc.y + 20;
+  // Encabezado con fondo guinda: Cantidad | Productos | Precio | Total
+  doc.save();
+  doc.fillColor(colorGuinda).rect(40, tableTop, 520, 20).fill();
+  doc.fillColor('#FFFFFF').fontSize(10);
+  const colCant = 50;
+  const colProd = 130;
+  const colPU = 410;
+  const colTot = 490;
+  doc.text('Cantidad', colCant, tableTop + 5, { width: 70 });
+  doc.text('Productos', colProd, tableTop + 5, { width: 260 });
+  doc.text('Precio', colPU, tableTop + 5, { width: 60, align: 'right' });
+  doc.text('Total', colTot, tableTop + 5, { width: 60, align: 'right' });
+  doc.restore();
 
-    // Línea separadora
-    doc
-      .strokeColor(colorGuinda)
-      .lineWidth(1)
-      .moveTo(50, doc.y)
-      .lineTo(550, doc.y)
-      .stroke();
-    doc.moveDown(1);
-
-    // --- DETALLES DE LOS PRODUCTOS ---
-    doc
-      .fontSize(14)
-      .fillColor("#000000")
-      .text("DETALLES DEL PEDIDO", { underline: true });
-    doc.moveDown(1);
-
-    // Encabezados de tabla
-    const tableTop = doc.y;
-    const col1 = 50; // Producto
-    const col2 = 200; // Tipo Medida
-    const col3 = 280; // Cantidad
-    const col4 = 360; // Precio Unit.
-    const col5 = 480; // Subtotal
-
-    doc.fontSize(9).fillColor("#444444");
-    doc.text("Producto", col1, tableTop, { width: 140 });
-    doc.text("Unidad", col2, tableTop, { width: 70 });
-    doc.text("Cantidad", col3, tableTop, { width: 70, align: "right" });
-    doc.text("Precio Unit.", col4, tableTop, { width: 100, align: "right" });
-    doc.text("Subtotal", col5, tableTop, { width: 70, align: "right" });
-
-    // Línea debajo del encabezado
-    doc
-      .strokeColor("#aaaaaa")
-      .lineWidth(1)
-      .moveTo(50, tableTop + 15)
-      .lineTo(550, tableTop + 15)
-      .stroke();
-
-    let yPosition = tableTop + 25;
+  let yPosition = tableTop + 26;
     let totalM2 = 0;
     let subtotal = 0;
 
@@ -1318,120 +1478,103 @@ const generarFacturaPDF = async (req, res) => {
         totalM2 += parseFloat(item.cantidad_m2_calculada || 0);
       }
 
-      doc.fontSize(9).fillColor("#000000");
-
-      // Nombre del producto
-      doc.text(producto.nombre, col1, yPosition, { width: 140 });
-
-      // Tipo de medida (piezas o m²)
-      doc.text(item.tipo_medida === "m2" ? "m²" : "piezas", col2, yPosition, {
-        width: 70,
-      });
-
-      // Cantidad según tipo de medida
-      const cantidad =
-        item.tipo_medida === "piezas"
-          ? item.cantidad_piezas_calculada
-          : item.cantidad_m2_calculada;
-      doc.text(cantidad.toFixed(2), col3, yPosition, {
-        width: 70,
-        align: "right",
-      });
-
-      // Precio unitario
-      doc.text(
-        `$${parseFloat(item.precio_unitario || 0).toFixed(2)}`,
-        col4,
-        yPosition,
-        {
-          width: 100,
-          align: "right",
-        }
-      );
-
-      // Subtotal del producto
-      doc.text(
-        `$${parseFloat(item.subtotal || 0).toFixed(2)}`,
-        col5,
-        yPosition,
-        {
-          width: 70,
-          align: "right",
-        }
-      );
-
-      // Descripción adicional si existe
+  doc.fontSize(10).fillColor('#000');
+      const cantidad = item.tipo_medida === 'piezas' ? item.cantidad_piezas_calculada : item.cantidad_m2_calculada;
+      // Producto y descripción juntos (wrap dinámico)
+      let nombreLinea = producto.nombre || '';
       if (item.descripcion) {
-        yPosition += 15;
-        doc.fontSize(8).fillColor("#666666");
-        doc.text(`  ${item.descripcion}`, col1, yPosition, { width: 500 });
+        nombreLinea += ` - ${item.descripcion}`;
       }
-
-      yPosition += 25;
+      const productColWidth = 280;
+      doc.fontSize(10);
+      const productHeight = doc.heightOfString(nombreLinea, { width: productColWidth });
+      const rowHeight = Math.max(20, productHeight);
+      doc.text(cantidad.toFixed(2), colCant, yPosition, { width: 60 });
+      doc.text(nombreLinea, colProd, yPosition, { width: productColWidth });
+      doc.text(`$${parseFloat(item.precio_unitario || 0).toFixed(2)}`, colPU, yPosition, { width: 60, align: 'right' });
+      doc.text(`$${parseFloat(item.subtotal || 0).toFixed(2)}`, colTot, yPosition, { width: 60, align: 'right' });
+      yPosition += rowHeight + 4;
 
       // Nueva página si es necesario
       if (yPosition > 700) {
         doc.addPage();
-        yPosition = 50;
+        const newTop = 50;
+        // Redibujar encabezado de tabla
+        doc.save();
+        doc.fillColor(colorGuinda).rect(40, newTop, 520, 20).fill();
+        doc.fillColor('#FFFFFF').fontSize(10);
+        doc.text('Cantidad', colCant, newTop + 5, { width: 70 });
+        doc.text('Productos', colProd, newTop + 5, { width: 260 });
+        doc.text('Precio', colPU, newTop + 5, { width: 60, align: 'right' });
+        doc.text('Total', colTot, newTop + 5, { width: 60, align: 'right' });
+        doc.restore();
+        yPosition = newTop + 26;
       }
     }
 
-    // Línea antes del total
-    doc
-      .strokeColor("#aaaaaa")
-      .lineWidth(1)
-      .moveTo(50, yPosition)
-      .lineTo(550, yPosition)
-      .stroke();
-    yPosition += 15;
+    // Bloque totales a la derecha y notas/bancos a la izquierda
+    doc.strokeColor('#BBBBBB').lineWidth(1).moveTo(40, yPosition).lineTo(560, yPosition).stroke();
+    yPosition += 10;
 
-    // --- TOTALES ---
-    doc.fontSize(10).fillColor("#000000");
-    doc.text(`Total m²:`, 380, yPosition, { width: 100 });
-    doc.text(totalM2.toFixed(2), 480, yPosition, { width: 70, align: "right" });
-    yPosition += 20;
+    const rightStart = yPosition;
+    // Subtotal sin IVA (si existe campo en el modelo, usar orden.subtotal; si no, usamos subtotal acumulado)
+    const subtotalBase = orden.subtotal ? parseFloat(orden.subtotal) : subtotal;
+    let ivaMonto = 0;
+    if (orden.incluir_iva) {
+      ivaMonto = orden.iva ? parseFloat(orden.iva) : parseFloat((subtotalBase * 0.16).toFixed(2));
+    }
+    const totalFinal = parseFloat((subtotalBase + ivaMonto).toFixed(2));
+    const saldoPendiente = totalFinal - parseFloat(orden.anticipo || 0);
 
-    doc.fontSize(12).font("Helvetica-Bold");
-    doc.text(`TOTAL:`, 380, yPosition, { width: 100 });
-    doc.text(`$${parseFloat(orden.total).toFixed(2)}`, 480, yPosition, {
-      width: 70,
-      align: "right",
-    });
-    yPosition += 20;
+    // Totales (caja)
+    doc.fontSize(11).fillColor('#000');
+    doc.text('Subtotal:', 390, rightStart, { width: 90 });
+    doc.text(`$${subtotalBase.toFixed(2)}`, 470, rightStart, { width: 90, align: 'right' });
+    let lineY = rightStart + 15;
+    if (orden.incluir_iva) {
+      doc.text('IVA (16%):', 390, lineY, { width: 90 });
+      doc.text(`$${ivaMonto.toFixed(2)}`, 470, lineY, { width: 90, align: 'right' });
+      lineY += 18;
+    }
+    doc.fontSize(12).font('Helvetica-Bold').text('Total:', 390, lineY, { width: 90 });
+    doc.text(`$${totalFinal.toFixed(2)} MXN`, 470, lineY, { width: 90, align: 'right' });
+    lineY += 18;
+    doc.fontSize(11).fillColor('#006600').font('Helvetica').text('Anticipo:', 390, lineY, { width: 90 });
+    doc.text(`$${parseFloat(orden.anticipo || 0).toFixed(2)}`, 470, lineY, { width: 90, align: 'right' });
+    lineY += 18;
+    doc.fontSize(11).fillColor('#CC0000').text('Saldo Pend.:', 390, lineY, { width: 90 });
+    doc.text(`$${saldoPendiente.toFixed(2)}`, 470, lineY, { width: 90, align: 'right' });
 
-    doc.fontSize(11).fillColor("#006600");
-    doc.text(`Anticipo:`, 380, yPosition, { width: 100 });
-    doc.text(`$${parseFloat(orden.anticipo).toFixed(2)}`, 480, yPosition, {
-      width: 70,
-      align: "right",
-    });
-    yPosition += 20;
-
-    const saldoPendiente = parseFloat(orden.total) - parseFloat(orden.anticipo);
-    doc.fontSize(11).fillColor("#CC0000");
-    doc.text(`Saldo Pendiente:`, 380, yPosition, { width: 100 });
-    doc.text(`$${saldoPendiente.toFixed(2)}`, 480, yPosition, {
-      width: 70,
-      align: "right",
-    });
-    yPosition += 30;
+    // Notas y datos bancarios
+    const leftStart = rightStart;
+  doc.fontSize(11).fillColor('#000').text('Método de pago:', 40, leftStart);
+  doc.fontSize(10).fillColor('#000').text('Efectivo, transferencia, tarjetas débito y crédito', 40, leftStart + 14, { width: 320 });
+  let notesY = leftStart + 36;
+  doc.fontSize(11).fillColor('#000').text('Notas:', 40, notesY); notesY += 14;
+  doc.fontSize(10).fillColor('#000').text(`ANTICIPO: $${parseFloat(orden.anticipo || 0).toFixed(2)}`, 40, notesY); notesY += 14;
+  doc.fontSize(9).fillColor('#444').text('Cotización válida por 7 días.', 40, notesY, { width: 480 }); notesY += 14;
+  doc.fontSize(11).fillColor('#000').text('Datos Bancarios:', 40, notesY); notesY += 14;
+  doc.fontSize(9).fillColor('#000').text('MÁRMOLES Y RECUBRIMIENTOS PETROARTE S.A.S. DE C.V.', 40, notesY, { width: 480 }); notesY += 12;
+  doc.fontSize(9).text('RFC: MRP-231024-SI7', 40, notesY, { width: 480 }); notesY += 12;
+  doc.fontSize(9).text('Banco: SANTANDER ⎯ Cuenta: 6551080948', 40, notesY, { width: 480 }); notesY += 12;
+  doc.fontSize(9).text('CLABE INTERBANCARIA: 014119656108094843', 40, notesY, { width: 480 }); notesY += 12;
+  doc.fontSize(9).text('Email: marmolespetroarte@gmail.com', 40, notesY, { width: 480 }); notesY += 16;
+  doc.fontSize(8).fillColor('#555').text('* COTIZACIÓN VÁLIDA ÚNICAMENTE DURANTE LOS PRÓXIMOS 7 DÍAS.', 40, notesY, { width: 500 }); notesY += 10;
+  doc.fontSize(8).text('* NO INCLUYE TRABAJOS DE ALBAÑILERÍA, PLAFÓN, ELECTRICIDAD, CARPINTERÍA, ETC.', 40, notesY, { width: 500 }); notesY += 10;
+  doc.fontSize(8).text('* ESTE PRESUPUESTO VARIARÁ SI SE HACEN REQUISICIONES EXTRA DURANTE LA INSTALACIÓN.', 40, notesY, { width: 500 }); notesY += 10;
+  doc.fontSize(8).text('* SOLICITAMOS GENTILMENTE EL 70% DE ANTICIPO, EL RESTO A CONTRA AVANCE DE LA OBRA O AVISO DE ENTREGA.', 40, notesY, { width: 500 }); notesY += 10;
+  doc.fontSize(8).text('* LOS PRODUCTOS CONTENIDOS EN ESTA COTIZACIÓN POR SER DE ORIGEN NATURAL TIENEN VARIACIÓN EN TONO, BETA Y BRILLO.', 40, notesY, { width: 500 }); notesY += 18;
+    yPosition = Math.max(lineY + 30, notesY);
 
     // --- PIE DE PÁGINA ---
-    doc.fontSize(10).fillColor("#666666").font("Helvetica");
-    doc.text(`Estado: ${orden.status.toUpperCase()}`, 50, yPosition);
-    yPosition += 30;
-
-    // Línea final
-    doc
-      .strokeColor("#aaaaaa")
-      .lineWidth(1)
-      .moveTo(50, yPosition)
-      .lineTo(550, yPosition)
-      .stroke();
-    yPosition += 15;
-
-    doc.fontSize(8).fillColor("#888888");
-    doc.text("Gracias por su preferencia", { align: "center" });
+  doc.fontSize(9).fillColor('#666').text(`Estado: ${orden.status.toUpperCase()}`, 40, yPosition);
+  yPosition += 15;
+  // Barra inferior guinda con lema
+  const footerY = yPosition + 10;
+  doc.save();
+  doc.fillColor(colorGuinda).rect(40, footerY, 520, 18).fill();
+  doc.fillColor('#FFFFFF').fontSize(9).text('La Piedra Natural Hecha Arte', 40, footerY + 4, { width: 520, align: 'center' });
+  doc.restore();
 
     // Finalizar el PDF
     doc.end();

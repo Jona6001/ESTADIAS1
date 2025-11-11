@@ -235,6 +235,12 @@ const Clients = () => {
     setMenuOpen(false);
     navigate("/config");
   };
+  // rol actual
+  let isAdmin = false;
+  try {
+    const u = JSON.parse(localStorage.getItem("user")||"{}");
+    isAdmin = String(u?.rol||"").toLowerCase()==="admin";
+  } catch {}
 
   return (
     <div className="home-bg">
@@ -262,7 +268,7 @@ const Clients = () => {
               <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
               <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
               <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
-              <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+              {isAdmin && <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>}
             </div>
           </div>
           {/* Botones normales (ocultos en móvil) */}
@@ -271,7 +277,7 @@ const Clients = () => {
             <button className={`nav-btn${location.pathname === "/inventario" ? " nav-btn-active" : ""}`} onClick={() => navigate("/inventario")}>Inventario</button>
             <button className={`nav-btn${location.pathname === "/ventas" ? " nav-btn-active" : ""}`} onClick={() => navigate("/ventas")}>Ventas</button>
             <button className={`nav-btn${location.pathname === "/clientes" ? " nav-btn-active" : ""}`} onClick={() => navigate("/clientes")}>Clientes</button>
-            <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>
+            {isAdmin && <button className={`nav-btn${location.pathname === "/usuarios" ? " nav-btn-active" : ""}`} onClick={() => navigate("/usuarios")}>Usuarios</button>}
           </div>
           {/* FECHA Y HORA */}
           <div className="nav-datetime">

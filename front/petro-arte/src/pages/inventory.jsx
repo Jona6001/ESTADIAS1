@@ -14,11 +14,13 @@ import {
 const API_URL = "http://localhost:3000/productos";
 
 const initialForm = {
+  tipoMaterial: "",
   nombre: "",
+  unidadMedida: "piezas", // piezas o m2
   descripcion: "",
   imagen: "",
-  cantidad_piezas: 0,
-  medida_por_unidad: 0,
+  cantidad_piezas: "",
+  medida_por_unidad: "",
 };
 
 const Inventory = () => {
@@ -106,11 +108,13 @@ const Inventory = () => {
 
   const openEditModal = (producto) => {
     setForm({
-      nombre: producto.nombre,
+      tipoMaterial: producto.tipoMaterial || "",
+      nombre: producto.nombre || "",
+      unidadMedida: producto.cantidad_piezas !== null ? "piezas" : "m2",
       descripcion: producto.descripcion || "",
       imagen: producto.imagen || "",
-      cantidad_piezas: producto.cantidad_piezas,
-      medida_por_unidad: producto.medida_por_unidad,
+      cantidad_piezas: producto.cantidad_piezas ?? "",
+      medida_por_unidad: producto.medida_por_unidad ?? "",
     });
     setEditId(producto.ID || producto.id);
     setModalOpen("edit");
@@ -142,15 +146,35 @@ const Inventory = () => {
   const handleAdd = async (e) => {
     e.preventDefault();
     setErrorMsg("");
+    // Validación frontend
+    if (!form.tipoMaterial || !form.nombre || !form.unidadMedida) {
+      setErrorMsg("Los campos tipoMaterial, nombre y unidadMedida son requeridos");
+      return;
+    }
     const token = localStorage.getItem("token");
     try {
+      // Armar payload según unidadMedida
+      let payload = {
+        tipoMaterial: form.tipoMaterial,
+        nombre: form.nombre,
+        unidadMedida: form.unidadMedida,
+        descripcion: form.descripcion,
+        imagen: form.imagen,
+      };
+      if (form.unidadMedida === "piezas") {
+        payload.cantidad_piezas = Number(form.cantidad_piezas) || 0;
+        payload.medida_por_unidad = Number(form.medida_por_unidad) || 0;
+      } else if (form.unidadMedida === "m2") {
+        payload.cantidad_m2 = Number(form.cantidad_piezas) || 0;
+        payload.medida_por_unidad = Number(form.medida_por_unidad) || 0;
+      }
       const res = await fetch(API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.mensaje || "Error al agregar producto");
@@ -164,15 +188,33 @@ const Inventory = () => {
   const handleEdit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
+    if (!form.tipoMaterial || !form.nombre || !form.unidadMedida) {
+      setErrorMsg("Los campos tipoMaterial, nombre y unidadMedida son requeridos");
+      return;
+    }
     const token = localStorage.getItem("token");
     try {
+      let payload = {
+        tipoMaterial: form.tipoMaterial,
+        nombre: form.nombre,
+        unidadMedida: form.unidadMedida,
+        descripcion: form.descripcion,
+        imagen: form.imagen,
+      };
+      if (form.unidadMedida === "piezas") {
+        payload.cantidad_piezas = Number(form.cantidad_piezas) || 0;
+        payload.medida_por_unidad = Number(form.medida_por_unidad) || 0;
+      } else if (form.unidadMedida === "m2") {
+        payload.cantidad_m2 = Number(form.cantidad_piezas) || 0;
+        payload.medida_por_unidad = Number(form.medida_por_unidad) || 0;
+      }
       const res = await fetch(`${API_URL}/${editId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       let data;
       let text = await res.text();
@@ -235,6 +277,12 @@ const Inventory = () => {
     setMenuOpen(false);
     navigate("/config");
   };
+  // rol actual para ocultar Usuarios si no es admin
+  let isAdmin = false;
+  try {
+    const u = JSON.parse(localStorage.getItem("user")||"{}");
+    isAdmin = String(u?.rol||"").toLowerCase()==="admin";
+  } catch { /* ignore */ }
 
   return (
     <div className="home-bg">
@@ -291,14 +339,16 @@ const Inventory = () => {
               >
                 Clientes
               </button>
-              <button
-                className={`nav-btn${
-                  location.pathname === "/usuarios" ? " nav-btn-active" : ""
-                }`}
-                onClick={() => navigate("/usuarios")}
-              >
-                Usuarios
-              </button>
+              {isAdmin && (
+                <button
+                  className={`nav-btn${
+                    location.pathname === "/usuarios" ? " nav-btn-active" : ""
+                  }`}
+                  onClick={() => navigate("/usuarios")}
+                >
+                  Usuarios
+                </button>
+              )}
             </div>
           </div>
 
@@ -336,14 +386,16 @@ const Inventory = () => {
             >
               Clientes
             </button>
-            <button
-              className={`nav-btn${
-                location.pathname === "/usuarios" ? " nav-btn-active" : ""
-              }`}
-              onClick={() => navigate("/usuarios")}
-            >
-              Usuarios
-            </button>
+            {isAdmin && (
+              <button
+                className={`nav-btn${
+                  location.pathname === "/usuarios" ? " nav-btn-active" : ""
+                }`}
+                onClick={() => navigate("/usuarios")}
+              >
+                Usuarios
+              </button>
+            )}
           </div>
 
           {/* Derecha: fecha/hora + usuario */}
@@ -735,10 +787,19 @@ const Inventory = () => {
                     maxWidth: "100%",
                   }}
                 >
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <span style={{ minWidth: 110 }}>Nombre:</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Tipo Material*:</span>
+                    <input
+                      className="user-input"
+                      type="text"
+                      name="tipoMaterial"
+                      value={form.tipoMaterial}
+                      onChange={handleChange}
+                      required
+                    />
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Nombre*:</span>
                     <input
                       className="user-input"
                       type="text"
@@ -748,9 +809,20 @@ const Inventory = () => {
                       required
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Unidad*:</span>
+                    <select
+                      className="user-input"
+                      name="unidadMedida"
+                      value={form.unidadMedida}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="piezas">Piezas</option>
+                      <option value="m2">m²</option>
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ minWidth: 110 }}>Descripción:</span>
                     <input
                       className="user-input"
@@ -760,9 +832,7 @@ const Inventory = () => {
                       onChange={handleChange}
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ minWidth: 110 }}>URL imagen:</span>
                     <input
                       className="user-input"
@@ -773,75 +843,40 @@ const Inventory = () => {
                       placeholder="(opcional)"
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <span style={{ minWidth: 110 }}>Cantidad piezas:</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>{form.unidadMedida === "piezas" ? "Cantidad piezas:" : "Cantidad total m²:"}</span>
                     <input
                       className="user-input"
                       type="number"
                       name="cantidad_piezas"
-                      value={
-                        form.cantidad_piezas === 0 ? "" : form.cantidad_piezas
-                      }
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          cantidad_piezas:
-                            e.target.value === ""
-                              ? 0
-                              : parseFloat(e.target.value),
-                        })
-                      }
+                      value={form.cantidad_piezas}
+                      onChange={handleChange}
+                      min={0}
                       step="any"
                       required
-                      onFocus={(e) => {
-                        if (form.cantidad_piezas === 0) e.target.value = "";
-                      }}
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <span style={{ minWidth: 110 }}>Medida/unidad (m2):</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Medida/unidad (m²):</span>
                     <input
                       className="user-input"
                       type="number"
                       name="medida_por_unidad"
-                      value={
-                        form.medida_por_unidad === 0
-                          ? ""
-                          : form.medida_por_unidad
-                      }
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          medida_por_unidad: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                      value={form.medida_por_unidad}
+                      onChange={handleChange}
                       min={0}
                       step="any"
                       required
-                      onFocus={(e) => {
-                        if (form.medida_por_unidad === 0) e.target.value = "";
-                      }}
                     />
                   </label>
-                  {/* Campo de estado eliminado */}
                   {errorMsg && (
-                    <div style={{ color: "#a30015", marginBottom: 8 }}>
-                      {errorMsg}
-                    </div>
+                    <div style={{ color: "#a30015", marginBottom: 8 }}>{errorMsg}</div>
                   )}
                   <div className="modal-btn-row">
                     <button type="submit" className="add-btn">
                       <FaPlus style={{ marginRight: 6 }} /> Agregar
                     </button>
-                    <button
-                      type="button"
-                      className="cancel-btn"
-                      onClick={closeModal}
-                    >
+                    <button type="button" className="cancel-btn" onClick={closeModal}>
                       <FaTimes style={{ marginRight: 6 }} /> Cancelar
                     </button>
                   </div>
@@ -869,10 +904,19 @@ const Inventory = () => {
                     maxWidth: "100%",
                   }}
                 >
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <span style={{ minWidth: 110 }}>Nombre:</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Tipo Material*:</span>
+                    <input
+                      className="user-input"
+                      type="text"
+                      name="tipoMaterial"
+                      value={form.tipoMaterial}
+                      onChange={handleChange}
+                      required
+                    />
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Nombre*:</span>
                     <input
                       className="user-input"
                       type="text"
@@ -882,9 +926,20 @@ const Inventory = () => {
                       required
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Unidad*:</span>
+                    <select
+                      className="user-input"
+                      name="unidadMedida"
+                      value={form.unidadMedida}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="piezas">Piezas</option>
+                      <option value="m2">m²</option>
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ minWidth: 110 }}>Descripción:</span>
                     <input
                       className="user-input"
@@ -894,9 +949,7 @@ const Inventory = () => {
                       onChange={handleChange}
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ minWidth: 110 }}>URL imagen:</span>
                     <input
                       className="user-input"
@@ -907,75 +960,40 @@ const Inventory = () => {
                       placeholder="(opcional)"
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <span style={{ minWidth: 110 }}>Cantidad piezas:</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>{form.unidadMedida === "piezas" ? "Cantidad piezas:" : "Cantidad total m²:"}</span>
                     <input
                       className="user-input"
                       type="number"
                       name="cantidad_piezas"
-                      value={
-                        form.cantidad_piezas === 0 ? "" : form.cantidad_piezas
-                      }
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          cantidad_piezas:
-                            e.target.value === ""
-                              ? 0
-                              : parseFloat(e.target.value),
-                        })
-                      }
+                      value={form.cantidad_piezas}
+                      onChange={handleChange}
+                      min={0}
                       step="any"
                       required
-                      onFocus={(e) => {
-                        if (form.cantidad_piezas === 0) e.target.value = "";
-                      }}
                     />
                   </label>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    <span style={{ minWidth: 110 }}>Medida/unidad (m2):</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ minWidth: 110 }}>Medida/unidad (m²):</span>
                     <input
                       className="user-input"
                       type="number"
                       name="medida_por_unidad"
-                      value={
-                        form.medida_por_unidad === 0
-                          ? ""
-                          : form.medida_por_unidad
-                      }
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          medida_por_unidad: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                      value={form.medida_por_unidad}
+                      onChange={handleChange}
                       min={0}
                       step="any"
                       required
-                      onFocus={(e) => {
-                        if (form.medida_por_unidad === 0) e.target.value = "";
-                      }}
                     />
                   </label>
-                  {/* Campo de estado eliminado */}
                   {errorMsg && (
-                    <div style={{ color: "#a30015", marginBottom: 8 }}>
-                      {errorMsg}
-                    </div>
+                    <div style={{ color: "#a30015", marginBottom: 8 }}>{errorMsg}</div>
                   )}
                   <div className="modal-btn-row">
                     <button type="submit" className="add-btn">
                       <FaSave style={{ marginRight: 6 }} /> Guardar
                     </button>
-                    <button
-                      type="button"
-                      className="cancel-btn"
-                      onClick={closeModal}
-                    >
+                    <button type="button" className="cancel-btn" onClick={closeModal}>
                       <FaTimes style={{ marginRight: 6 }} /> Cancelar
                     </button>
                   </div>
