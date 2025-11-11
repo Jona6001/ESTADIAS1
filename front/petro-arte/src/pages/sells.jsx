@@ -55,6 +55,18 @@ const Sells = () => {
   const menuRef = useRef();
   const navigate = useNavigate();
   const location = useLocation();
+  // Cargar usuario para mostrar nombre en la barra y validar sesión
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/");
+      return;
+    }
+    try {
+      const u = JSON.parse(localStorage.getItem("user") || "{}");
+      if (u && u.nombre) setUserName(u.nombre);
+    } catch { /* ignore */ }
+  }, [navigate]);
   // Rol
   let isAdmin = false;
   try {

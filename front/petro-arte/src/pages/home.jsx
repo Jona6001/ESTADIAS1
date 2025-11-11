@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import "../App.css";
+import "../home.overrides.css";
 import { useNavigate, useLocation } from "react-router-dom";
-import { FaUser, FaHome, FaBoxes, FaChartBar, FaReceipt, FaUsers, FaMoneyCheckAlt, FaRecycle } from "react-icons/fa";
+import { FaUser, FaHome, FaBoxes, FaChartBar, FaReceipt, FaUsers, FaMoneyCheckAlt, FaRecycle, FaHourglassHalf, FaCheckCircle, FaTimesCircle, FaClipboardList, FaDollarSign, FaExclamationCircle } from "react-icons/fa";
 
 const Home = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,7 +50,17 @@ const Home = () => {
 
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [stats, setStats] = useState({ clientes: 0, cotizaciones: 0, pendientes: 0, pagadas: 0, canceladas: 0 });
+  const [stats, setStats] = useState({ clientes: 0, cotizaciones: 0, pendientes: 0, pagadas: 0, canceladas: 0, montoTotal: 0, montoPendiente: 0 });
+  const [recentSales, setRecentSales] = useState([]);
+  const [chartData, setChartData] = useState([
+    { label: "Lun", value: 0 },
+    { label: "Mar", value: 0 },
+    { label: "Mié", value: 0 },
+    { label: "Jue", value: 0 },
+    { label: "Vie", value: 0 },
+    { label: "Sáb", value: 0 },
+    { label: "Dom", value: 0 },
+  ]);
   const handleLogout = () => {
     setMenuOpen(false);
     setShowLogoutConfirm(true);
@@ -69,7 +80,7 @@ const Home = () => {
     navigate("/config");
   };
 
-  // Cargar datos reales para panel rápido
+  // Cargar datos reales para panel rápido y estadísticas
   useEffect(() => {
     const fetchDash = async () => {
       try {
@@ -87,27 +98,48 @@ const Home = () => {
         const pendientes = cotArr.filter(c => (c.status||"").toLowerCase()==="pendiente").length;
         const pagadas = cotArr.filter(c => (c.status||"").toLowerCase()==="pagado").length;
         const canceladas = cotArr.filter(c => (c.status||"").toLowerCase()==="cancelado").length;
-        setStats({ clientes: clientesArr.length, cotizaciones: cotArr.length, pendientes, pagadas, canceladas });
+        const montoTotal = cotArr.reduce((acc,c)=> acc + Number(c.total||0),0);
+        const montoPendiente = cotArr.reduce((acc,c)=> {
+          const total = Number(c.total||0); const anticipo = Number(c.anticipo||0); return acc + Math.max(0,total-anticipo);
+        },0);
+        setStats({ clientes: clientesArr.length, cotizaciones: cotArr.length, pendientes, pagadas, canceladas, montoTotal, montoPendiente });
         const sorted = [...cotArr].sort((a,b) => new Date(b.fecha_creacion||b.fecha||0) - new Date(a.fecha_creacion||a.fecha||0));
         setRecentSales(sorted.slice(0,5));
+
+        // Estadísticas semanales: conteo de cotizaciones por día (Lun-Dom) de la semana actual
+        const now = new Date();
+        // Obtener lunes de esta semana (considerando lunes como primer día)
+        const day = (now.getDay() + 6) % 7; // 0..6 donde 0 = Lunes
+        const monday = new Date(now);
+        monday.setHours(0,0,0,0);
+        monday.setDate(now.getDate() - day);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23,59,59,999);
+
+        const counts = [0,0,0,0,0,0,0]; // Lun..Dom
+        cotArr.forEach((c) => {
+          const d = new Date(c.fecha_creacion || c.fecha || 0);
+          if (!isNaN(d.getTime()) && d >= monday && d <= sunday) {
+            const idx = (d.getDay() + 6) % 7; // 0..6 L-D
+            counts[idx] += 1;
+          }
+        });
+        setChartData([
+          { label: "Lun", value: counts[0] },
+          { label: "Mar", value: counts[1] },
+          { label: "Mié", value: counts[2] },
+          { label: "Jue", value: counts[3] },
+          { label: "Vie", value: counts[4] },
+          { label: "Sáb", value: counts[5] },
+          { label: "Dom", value: counts[6] },
+        ]);
       } catch {
         // silencioso
       }
     };
     fetchDash();
   }, []);
-
-  const [recentSales, setRecentSales] = useState([]);
-
-  const chartData = [
-    { label: "Lun", value: 12 },
-    { label: "Mar", value: 18 },
-    { label: "Mié", value: 9 },
-    { label: "Jue", value: 15 },
-    { label: "Vie", value: 22 },
-    { label: "Sáb", value: 17 },
-    { label: "Dom", value: 7 },
-  ];
   const maxValue = Math.max(...chartData.map(d => d.value)) || 1;
 
   // Role
@@ -198,69 +230,109 @@ const Home = () => {
 
       {/* Dashboard Home */}
       <main className="home-dashboard">
+        {/* Espaciador superior adicional para alejar contenido del navbar */}
+        <div className="home-top-spacer" />
+
         {/* Accesos rápidos */}
-        <section className="home-left" style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:16 }}>
+        <section className="home-left">
+          <h3 className="section-title">Accesos rápidos</h3>
+          <div className="home-actions-grid">
             <button className="home-card home-card-action inventory-card" onClick={() => navigate("/inventario")} title="Inventario">
               <span className="home-card-icon"><FaBoxes size={26} /></span>
               <div className="home-card-text"><h3>Inventario</h3><p>{stats.cotizaciones>0?`Productos activos`:'Administrar productos'}</p></div>
             </button>
-            <button className="home-card home-card-action" onClick={() => navigate("/ventas")} title="Ventas" style={{ background:'#fff' }}>
+            <button className="home-card home-card-action inventory-card" onClick={() => navigate("/ventas")} title="Ventas">
               <span className="home-card-icon"><FaMoneyCheckAlt size={26} /></span>
               <div className="home-card-text"><h3>Ventas</h3><p>{stats.cotizaciones} cotizaciones</p></div>
             </button>
-            <button className="home-card home-card-action" onClick={() => navigate("/clientes")} title="Clientes" style={{ background:'#fff' }}>
+            <button className="home-card home-card-action inventory-card" onClick={() => navigate("/clientes")} title="Clientes">
               <span className="home-card-icon"><FaUsers size={26} /></span>
               <div className="home-card-text"><h3>Clientes</h3><p>{stats.clientes} registrados</p></div>
             </button>
-            <button className="home-card home-card-action" onClick={() => navigate("/residuos")} title="Residuos" style={{ background:'#fff' }}>
+            <button className="home-card home-card-action inventory-card" onClick={() => navigate("/residuos")} title="Residuos">
               <span className="home-card-icon"><FaRecycle size={26} /></span>
               <div className="home-card-text"><h3>Residuos</h3><p>Control sobrantes</p></div>
             </button>
             {isAdmin && (
-              <button className="home-card home-card-action" onClick={() => navigate("/usuarios")} title="Usuarios" style={{ background:'#fff' }}>
+              <button className="home-card home-card-action inventory-card" onClick={() => navigate("/usuarios")} title="Usuarios">
                 <span className="home-card-icon"><FaUser size={26} /></span>
                 <div className="home-card-text"><h3>Usuarios</h3><p>Gestión de roles</p></div>
               </button>
             )}
           </div>
           {/* Mini resumen de estados */}
-          <div className="card stats-card" style={{ marginTop:8 }}>
-            <div className="card-header"><FaChartBar size={18} /><h4>Resumen rápido</h4></div>
-            <ul style={{ listStyle:'none', padding:0, margin:0, display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:8 }}>
-              <li className="mini-stat"><strong>Total</strong><div>{stats.cotizaciones}</div></li>
-              <li className="mini-stat"><strong>Pendientes</strong><div>{stats.pendientes}</div></li>
-              <li className="mini-stat"><strong>Pagadas</strong><div>{stats.pagadas}</div></li>
-              <li className="mini-stat"><strong>Canceladas</strong><div>{stats.canceladas}</div></li>
-            </ul>
+          <h3 className="section-title" style={{ marginTop: 6 }}>Resumen</h3>
+          <div className="card kpi-row" style={{ marginTop:8 }}>
+            <div className="kpi" title="Cotizaciones totales">
+              <span className="kpi-icon"><FaClipboardList /></span>
+              <span className="kpi-label">Cotizaciones</span>
+              <span className="kpi-value">{stats.cotizaciones}</span>
+            </div>
+            <div className="kpi" title="Pendientes">
+              <span className="kpi-icon"><FaHourglassHalf /></span>
+              <span className="kpi-label">Pendientes</span>
+              <span className="kpi-value kpi-pendiente">{stats.pendientes}</span>
+            </div>
+            <div className="kpi" title="Pagadas">
+              <span className="kpi-icon"><FaCheckCircle /></span>
+              <span className="kpi-label">Pagadas</span>
+              <span className="kpi-value kpi-pagado">{stats.pagadas}</span>
+            </div>
+            <div className="kpi" title="Canceladas">
+              <span className="kpi-icon"><FaTimesCircle /></span>
+              <span className="kpi-label">Canceladas</span>
+              <span className="kpi-value kpi-cancelado">{stats.canceladas}</span>
+            </div>
+            <div className="kpi" title="Clientes registrados">
+              <span className="kpi-icon"><FaUsers /></span>
+              <span className="kpi-label">Clientes</span>
+              <span className="kpi-value">{stats.clientes}</span>
+            </div>
+            <div className="kpi" title="Monto total de cotizaciones">
+              <span className="kpi-icon"><FaDollarSign /></span>
+              <span className="kpi-label">Monto Total</span>
+              <span className="kpi-value">${stats.montoTotal.toLocaleString('es-MX',{minimumFractionDigits:2})}</span>
+            </div>
+            <div className="kpi" title="Saldo pendiente acumulado">
+              <span className="kpi-icon"><FaExclamationCircle /></span>
+              <span className="kpi-label">Saldo Pendiente</span>
+              <span className="kpi-value kpi-pendiente">${stats.montoPendiente.toLocaleString('es-MX',{minimumFractionDigits:2})}</span>
+            </div>
           </div>
         </section>
 
-        {/* Derecha: Ventas recientes (arriba) + Estadísticas (abajo) */}
-        <aside className="home-right">
-          <div className="card recent-sales">
+        {/* Sección inferior: Tablas y estadísticas (a lo ancho) */}
+        <section className="home-bottom">
+          <div className="card recent-sales sales-card">
             <div className="card-header">
               <FaReceipt size={18} />
-              <h4>Ventas recientes</h4>
+              <h4>Últimas cotizaciones</h4>
             </div>
-            <ul className="sales-list">
-              {recentSales.length === 0 && <li style={{ padding:'0.5rem', color:'#666' }}>Sin datos recientes</li>}
-              {recentSales.map(s => (
-                <li key={s.id} className="sale-item">
-                  <div className="sale-left">
-                    <span className="sale-icon"><FaReceipt size={16} /></span>
-                    <div className="sale-meta">
-                      <strong>{s.id}</strong>
-                      <span>{s.cliente || s.Cliente?.nombre || '—'}</span>
-                    </div>
-                  </div>
-                  <div className="sale-right">
-                    <span className="sale-amount">${Number(s.total||s.subtotal||0).toLocaleString("es-MX", { minimumFractionDigits:2 })}</span>
-                    <span className="sale-date">{new Date(s.fecha_creacion||s.fecha||Date.now()).toLocaleDateString('es-MX')}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="sales-table">
+              <div className="sales-header sticky">
+                <span>ID</span>
+                <span>Cliente</span>
+                <span>Total</span>
+                <span>Fecha</span>
+                <span>Estado</span>
+              </div>
+              <ul className="sales-list scrollable">
+                {recentSales.length === 0 && <li style={{ padding:'0.5rem', color:'#666' }}>Sin datos recientes</li>}
+                {recentSales.map(s => {
+                  const status = String(s.status||'').toLowerCase();
+                  const badgeClass = `status-badge status-${status}`;
+                  return (
+                    <li key={s.id} className="sale-item">
+                      <span className="col-id">{s.id}</span>
+                      <span className="col-cliente">{s.cliente || s.Cliente?.nombre || '—'}</span>
+                      <span className="col-total">${Number(s.total||s.subtotal||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</span>
+                      <span className="col-fecha">{new Date(s.fecha_creacion||s.fecha||Date.now()).toLocaleDateString('es-MX')}</span>
+                      <span className="col-estado">{status && <span className={badgeClass}>{status}</span>}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
 
           <div className="card stats-card">
@@ -281,7 +353,7 @@ const Home = () => {
               ))}
             </div>
           </div>
-        </aside>
+        </section>
       </main>
     </div>
   );
