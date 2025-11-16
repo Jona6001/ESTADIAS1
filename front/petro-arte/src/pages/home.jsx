@@ -80,7 +80,7 @@ const Home = () => {
     navigate("/config");
   };
 
-  // Cargar datos reales para panel rápido y estadísticas
+  // Cargar datos reales para panel rápido y estadísticas  Front funcional
   useEffect(() => {
     const fetchDash = async () => {
       try {
