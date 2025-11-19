@@ -1,6 +1,4 @@
 const express = require("express");
-const path = require("path");
-const fs = require("fs");
 const { connectDB, sequelize } = require("./src/db/database");
 // Importar todos los modelos y relaciones desde index.js
 const models = require("./src/models");
@@ -28,14 +26,14 @@ app.use(residuosRoutes);
 
 // ...existing code...
 
-// Conexión a la base de datosEjemplo de organización recomendada
+// Conexión a la base de datos
 
 async function initializeApp() {
   try {
     await connectDB();
-    // Sincronizar modelos con la base de datos (actualiza esquemas automáticamente)
-    await sequelize.sync({ alter: false, force: false });
-    console.log("Tablas sincronizadas correctamente");
+    // Sincronizar modelos con la base de datos (alter: true para actualizar ENUMs)
+    await sequelize.sync({ alter: true, force: false });
+    console.log("Modelos sincronizados correctamente");
     // Iniciar el servidor
     app.listen(PORT, () => {
       console.log(`Servidor corriendo en el puerto ${PORT}`);
@@ -54,12 +52,3 @@ initializeApp();
 
 // Rutas
 // ... Define tus rutas aquí ...
-
-// Sirve el frontend (build de Vite) si existe, para que GET / cargue la SPA
-const FRONT_DIST = path.resolve(__dirname, "../front/dist");
-if (fs.existsSync(FRONT_DIST)) {
-  app.use(express.static(FRONT_DIST));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(FRONT_DIST, "index.html"));
-  });
-}

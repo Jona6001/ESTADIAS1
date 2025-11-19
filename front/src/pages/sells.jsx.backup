@@ -1,0 +1,4028 @@
+import React, { useState, useRef, useEffect } from "react";
+import "../App.css";
+import "../assets/reports.css";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  FaPlus,
+  FaSave,
+  FaTimes,
+  FaEdit,
+  FaTrash,
+  FaEye,
+  FaCopy,
+  FaFilePdf,
+  FaMoneyCheckAlt,
+  FaUser,
+  FaUsers,
+  FaList,
+  FaFileAlt,
+  FaPrint,
+} from "react-icons/fa";
+
+// Endpoints
+const API_COTIZACIONES =
+  "https://estadias1-backend-production.up.railway.app/api/ordenes";
+const API_CLIENTES =
+  "https://estadias1-backend-production.up.railway.app/clientes";
+const API_PRODUCTOS =
+  "https://estadias1-backend-production.up.railway.app/productos";
+
+const initialCotizacion = {
+  ID_cliente: "",
+  nombre: "",
+  incluir_iva: false,
+  productos: [], // [{ productoId, cantidad (m2), tipo_medida }]
+  anticipo: 0,
+  status: "pendiente",
+};
+
+const Sells = () => {
+  // Helper para mostrar estados con etiquetas amigables
+  const renderStatus = (s) => {
+    if (!s) return "-";
+    const key = String(s).toLowerCase();
+    const map = {
+      pendiente: "Pendiente",
+      pagado: "Pagado",
+      cancelado: "Cancelado",
+      en_proceso: "En proceso",
+      fabricado: "Fabricado",
+      espera_material: "En espera de material",
+      entregado: "Entregado",
+      terminado: "Terminado",
+    };
+    if (map[key]) return map[key];
+    const label = String(s).replaceAll("_", " ");
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  };
+  // Navbar / estado global de pantalla
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [dateStr, setDateStr] = useState("");
+  const [timeStr, setTimeStr] = useState("");
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const menuRef = useRef();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Cargar usuario para mostrar nombre en la barra y validar sesión
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/");
+      return;
+    }
+    try {
+      const u = JSON.parse(localStorage.getItem("user") || "{}");
+      if (u && u.nombre) setUserName(u.nombre);
+    } catch {
+      /* ignore */
+    }
+  }, [navigate]);
+  // Rol
+  let isAdmin = false;
+  try {
+    const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+    isAdmin = String(userObj?.rol || "").toLowerCase() === "admin";
+  } catch {}
+
+  // Datos
+  const [cotizaciones, setCotizaciones] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [productos, setProductos] = useState([]);
+
+  // UI/Modal
+  const [modalOpen, setModalOpen] = useState(null); // null | 'add' | 'edit' | 'confirmVenta'
+  const [ventaResumen, setVentaResumen] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsData, setDetailsData] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  // Reporte global por cliente
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportData, setReportData] = useState(null);
+  const [reportFilters, setReportFilters] = useState({
+    cliente: '', // ID del cliente o 'all' para todos
+    fechaInicio: '',
+    fechaFin: '',
+    estados: ['pendiente', 'pagado', 'cancelado', 'en_proceso', 'fabricado', 'espera_material', 'entregado'] // estados a incluir
+  });
+  const [reportLoading, setReportLoading] = useState(false);
+  // Marca de último ajuste por cotización para mostrar badge en detalles
+  const [adjustFlags, setAdjustFlags] = useState({});
+  // Guardar último resumen de ajustes para mostrarlo
+  // Removed unused adjustSummaries state (was legacy from previous inventory adjustment UI)
+  // Resumen de confirmación de inventario (piezas descontadas)
+  const [confirmSummaryOpen, setConfirmSummaryOpen] = useState(false);
+  const [confirmSummary, setConfirmSummary] = useState(null);
+  // Confirm modal - anticipo editable
+  const [confirmAbono, setConfirmAbono] = useState("");
+  const [confirmObs, setConfirmObs] = useState("");
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  // Filtro de cotizaciones
+  const [cotFilterText, setCotFilterText] = useState("");
+  const [cotFilterField, setCotFilterField] = useState("cliente");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [cotOrder, setCotOrder] = useState("recientes"); // 'recientes' | 'antiguos'
+
+  // Formulario cotización
+  const [form, setForm] = useState(initialCotizacion);
+  // Eliminado buscador de cliente en modal para ahorrar espacio
+  // opcional: búsqueda de productos (no usada actualmente)
+
+  // Fecha y hora
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const options = {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      };
+      setDateStr(now.toLocaleDateString("es-MX", options));
+      setTimeStr(now.toLocaleTimeString("es-MX", { hour12: false }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Cargar clientes, productos y cotizaciones
+  const fetchAll = async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      const token = localStorage.getItem("token");
+      const authHeaders = token
+        ? { Authorization: `Bearer ${token}`, Accept: "application/json" }
+        : { Accept: "application/json" };
+      const [resClientes, resProductos, resCots] = await Promise.all([
+        fetch(API_CLIENTES, { headers: authHeaders }),
+        fetch(API_PRODUCTOS, { headers: authHeaders }),
+        fetch(API_COTIZACIONES, { headers: authHeaders }),
+      ]);
+      const unauthorized = [resClientes, resProductos, resCots].find(
+        (r) => r.status === 401 || r.status === 403
+      );
+      if (unauthorized) {
+        setErrorMsg(
+          "Sesión inválida o expirada. Inicia sesión nuevamente para ver las ventas."
+        );
+        setClientes([]);
+        setProductos([]);
+        setCotizaciones([]);
+        return;
+      }
+      const parseSafe = async (res) => {
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      };
+      const cData = await parseSafe(resClientes);
+      const pData = await parseSafe(resProductos);
+      const oData = await parseSafe(resCots);
+      const clientesArr = Array.isArray(cData)
+        ? cData
+        : cData?.clientes || cData?.data || [];
+      const productosArr = Array.isArray(pData)
+        ? pData
+        : pData?.productos || pData?.data || [];
+      const cotArr = Array.isArray(oData?.data)
+        ? oData.data
+        : Array.isArray(oData)
+        ? oData
+        : [];
+      setClientes(Array.isArray(clientesArr) ? clientesArr : []);
+      setProductos(Array.isArray(productosArr) ? productosArr : []);
+      setCotizaciones(Array.isArray(cotArr) ? cotArr : []);
+    } catch (err) {
+      console.error("fetchAll error:", err);
+      setErrorMsg("No se pudieron cargar clientes/productos/cotizaciones");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  // Asegura que no quede ningún modal/overlay abierto al entrar a Ventas
+  useEffect(() => {
+    setModalOpen(null);
+    setDetailsOpen(false);
+    setReportOpen(false);
+    setShowDeleteConfirm(false);
+    setShowLogoutConfirm(false);
+    setConfirmSummaryOpen(false);
+  }, []);
+
+  // Cerrar menú usuario al hacer click fuera
+  useEffect(() => {
+    const onClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  // Modal handlers
+  const openAddModal = () => {
+    setForm({ ...initialCotizacion });
+    setModalOpen("add");
+    setErrorMsg("");
+  };
+
+  // Foco inteligente por mensaje de error del backend
+  const focusAccordingToError = (msg) => {
+    const m = (msg || "").toLowerCase();
+    // Anticipo
+    if (m.includes("anticipo")) {
+      const el = document.getElementById("anticipo-input");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus();
+      }
+      return;
+    }
+    // Cliente
+    if (m.includes("cliente")) {
+      const el = document.getElementById("cliente-select");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus();
+      }
+      return;
+    }
+    // Inventario insuficiente / producto
+    if (m.includes("inventario") || m.includes("producto")) {
+      const el =
+        document.getElementById("prod-0-productoId") ||
+        document.querySelector('[id^="prod-"][id$="-productoId"]');
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus();
+      }
+      return;
+    }
+    // Fallback: al inicio del modal
+    const modal =
+      document.querySelector(".modal-content.compact") ||
+      document.querySelector(".modal-content");
+    if (modal) modal.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const openConfirmVenta = async (cot) => {
+    setErrorMsg("");
+    try {
+      const token = localStorage.getItem("token");
+      const id = cot.ID || cot.id;
+      // Traer orden + historial de anticipos en paralelo
+      const [resOrden, resHist] = await Promise.all([
+        fetch(`${API_COTIZACIONES}/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }),
+        fetch(`${API_COTIZACIONES}/${id}/anticipos`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }),
+      ]);
+      const [txtOrden, txtHist] = await Promise.all([
+        resOrden.text(),
+        resHist.text(),
+      ]);
+      let dataOrden, dataHist;
+      try {
+        dataOrden = JSON.parse(txtOrden);
+      } catch {
+        dataOrden = { success: false, message: txtOrden };
+      }
+      try {
+        dataHist = JSON.parse(txtHist);
+      } catch {
+        dataHist = { success: false, message: txtHist };
+      }
+      if (!resOrden.ok || dataOrden?.success === false)
+        throw new Error(dataOrden?.message || "No se pudo cargar la orden");
+      const payload = dataOrden.data || dataOrden;
+      const ord = payload.cotizacion || payload;
+      const prods = Array.isArray(payload.productos) ? payload.productos : [];
+      const histArr =
+        resHist.ok && dataHist?.success !== false
+          ? dataHist?.data?.historial || []
+          : [];
+
+      const total = Number(ord.total || 0);
+      const anticipo = Number(ord.anticipo || 0);
+      const resto = Number((total - anticipo).toFixed(2));
+      const vendedor =
+        ord.Usuario?.nombre ||
+        ord.usuario?.nombre ||
+        cot.Usuario?.nombre ||
+        cot.usuario?.nombre ||
+        "-";
+      const productosNorm = prods
+        .map((p) => ({
+          productoId:
+            p.productoId || p.ID_producto || p.Producto?.ID || p.producto?.ID,
+          cantidad: p.cantidad,
+          tipoFigura: p.tipoFigura || p.tipo_figura || p.figura,
+          medidas: p.medidas || p.medida || p.medida_custom,
+        }))
+        .filter((x) => x.productoId);
+
+      setVentaResumen({
+        ID: ord.ID || ord.id,
+        ID_cliente: ord.ID_cliente,
+        total,
+        anticipo,
+        resto,
+        vendedor,
+        productos: productosNorm,
+        historialAnticipos: histArr,
+      });
+      setConfirmAbono("");
+      setConfirmObs("");
+      setModalOpen("confirmVenta");
+    } catch (e) {
+      setErrorMsg(e.message || "No se pudo abrir el modal de venta");
+    }
+  };
+
+  // Agregar anticipo (abono) desde el modal de confirmación
+  const handleAgregarAnticipo = async () => {
+    if (!ventaResumen) return;
+    const monto = Number(confirmAbono || 0);
+    if (isNaN(monto) || monto <= 0) {
+      setErrorMsg("Ingresa un monto válido para el anticipo.");
+      return;
+    }
+    try {
+      setConfirmLoading(true);
+      const token = localStorage.getItem("token");
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const id = ventaResumen.ID || ventaResumen.id;
+      const res = await fetch(`${API_COTIZACIONES}/${id}/anticipos`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          anticipo: monto,
+          ID_usuario: user?.ID,
+          observaciones: confirmObs || null,
+        }),
+      });
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "No se pudo agregar el anticipo");
+      // Actualizar valores locales del resumen
+      const anticipoNuevo = Number((ventaResumen.anticipo || 0) + monto);
+      const restoNuevo = Number((ventaResumen.total || 0) - anticipoNuevo);
+      setVentaResumen((prev) => ({
+        ...prev,
+        anticipo: anticipoNuevo,
+        resto: restoNuevo,
+      }));
+      setConfirmAbono("");
+      setConfirmObs("");
+      setErrorMsg("");
+    } catch (e) {
+      setErrorMsg(e.message || "No se pudo agregar el anticipo");
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+  void handleAgregarAnticipo;
+
+  const openDetails = async (cot) => {
+    const token = localStorage.getItem("token");
+    setDetailsOpen(true);
+    setDetailsLoading(true);
+    setDetailsData(null);
+    try {
+      const id = cot.ID || cot.id;
+      // Obtener detalles y también historial de anticipos en paralelo
+      const [res, resAntHist] = await Promise.all([
+        fetch(`${API_COTIZACIONES}/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }),
+        fetch(`${API_COTIZACIONES}/${id}/anticipos`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }),
+      ]);
+      const [txt, txtAntHist] = await Promise.all([
+        res.text(),
+        resAntHist.text(),
+      ]);
+      let data, dataAntHist;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      try {
+        dataAntHist = JSON.parse(txtAntHist);
+      } catch {
+        dataAntHist = { success: false, message: txtAntHist };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "No se pudo cargar detalles");
+      // si historial falla, seguimos mostrando detalles
+      const base = data.data || data;
+      const hist =
+        resAntHist.ok && dataAntHist?.success !== false
+          ? dataAntHist?.data?.historial || []
+          : [];
+      setDetailsData({
+        ...base,
+        anticipos: hist,
+        anticipos_meta: dataAntHist?.data?.orden || null,
+      });
+    } catch (err) {
+      setErrorMsg(err.message || "No se pudo cargar detalles");
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const [editTarget, setEditTarget] = useState(null);
+
+  const openEditModal = async (cot) => {
+    // Solo permitir edición de productos cuando la cotización está 'pendiente'
+    const rawStatus = (cot.status || "").toLowerCase();
+    if (rawStatus !== "pendiente") {
+      setErrorMsg(
+        "Solo se pueden modificar productos cuando el estado es 'pendiente'. Cambia el estado a pendiente o duplica la cotización."
+      );
+      return;
+    }
+    // Abrir modal con datos base
+    setEditTarget(cot);
+    setModalOpen("edit");
+    setErrorMsg("");
+
+    // Precargar valores básicos (incluir título e IVA)
+    setForm((prev) => ({
+      ...prev,
+      ID_cliente: cot.ID_cliente,
+      nombre: cot.nombre || cot.titulo || "",
+      incluir_iva: Boolean(cot.incluir_iva),
+      productos: [], // se cargarán abajo desde el detalle
+      anticipo: cot.anticipo || 0,
+      status: cot.status || "pendiente",
+    }));
+
+    // Cargar productos reales de la cotización para permitir edición completa
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_COTIZACIONES}/${cot.ID || cot.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(
+          data?.message || "No se pudo cargar productos de la cotización"
+        );
+      const payload = data.data || data;
+      const productosDetalle = Array.isArray(payload?.productos)
+        ? payload.productos
+        : [];
+
+      // Mapear al formato del formulario de edición/creación (solo m²)
+      const mapped = productosDetalle.map((p) => {
+        // El backend devuelve VentasProductos con relación Producto
+        // p.productoId es el ID del producto en esta venta
+        // p.Producto es el objeto del producto con ID, nombre, etc.
+        
+        let prodId = Number(p.productoId || 0);
+        if (!prodId && p.Producto) {
+          prodId = Number(p.Producto.ID || p.Producto.id || 0);
+        }
+        
+        // Usar cantidad_m2_calculada si existe (es el valor calculado)
+        // Si no, usar cantidad directamente
+        const cantidad = p.cantidad_m2_calculada || p.cantidad || 0;
+        
+        console.log("Producto mapeado:", { 
+          productoId: prodId,
+          cantidad, 
+          producto_nombre: p.Producto?.nombre
+        });
+        
+        return {
+          productoId: prodId,
+          cantidad: cantidad,
+          descripcion: p.descripcion ?? "",
+        };
+      });
+
+      setForm((prev) => ({ ...prev, productos: mapped }));
+    } catch (e) {
+      console.error("No se pudieron cargar productos para editar:", e);
+      // se deja el formulario con productos vacíos, usuario puede agregar si lo desea
+    }
+  };
+
+  const closeModal = () => {
+    setModalOpen(null);
+    setForm(initialCotizacion);
+    setErrorMsg("");
+  };
+
+  // Form handlers
+  // Lista de clientes (sin buscador en modal de add/edit para mantener compacto)
+  const filteredClientes = clientes;
+  // Evita warning si el modal no está montado en esta vista
+  void filteredClientes;
+
+  // Para productos, usamos la lista completa en el selector
+
+  // Productos en cotización
+  const handleAddProducto = () => {
+    setForm({
+      ...form,
+      productos: [
+        ...form.productos,
+        {
+          productoId: "",
+          cantidad: "", // m² total ingresado
+          descripcion: "",
+        },
+      ],
+    });
+  };
+  void handleAddProducto;
+
+  const handleRemoveProducto = (idx) => {
+    const next = [...form.productos];
+    next.splice(idx, 1);
+    setForm({ ...form, productos: next });
+  };
+  void handleRemoveProducto;
+
+  const handleProductoChange = (idx, field, value) => {
+    const next = [...form.productos];
+    // Convertir numéricos
+    const numericFields = ["cantidad"];
+    next[idx] = {
+      ...next[idx],
+      [field]:
+        numericFields.includes(field) && value !== "" ? Number(value) : value,
+    };
+    setForm({ ...form, productos: next });
+  };
+  void handleProductoChange;
+
+  // Validación con enfoque/scroll al primer error
+  const validateFormAndFocus = () => {
+    // Cliente
+    if (!form.ID_cliente) {
+      setErrorMsg("Selecciona un cliente.");
+      const el = document.getElementById("cliente-select");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus();
+      }
+      return false;
+    }
+    // Título
+    if (!form.nombre || form.nombre.trim().length < 3) {
+      setErrorMsg("Ingresa un título (mínimo 3 caracteres). ");
+      const el = document.getElementById("titulo-input");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus();
+      }
+      return false;
+    }
+    // Productos
+    if (!form.productos || form.productos.length === 0) {
+      setErrorMsg("Agrega al menos un producto.");
+      return false;
+    }
+    for (let i = 0; i < form.productos.length; i++) {
+      const p = form.productos[i];
+      // productoId
+      if (!p.productoId) {
+        setErrorMsg(`Selecciona el producto #${i + 1}.`);
+        const el = document.getElementById(`prod-${i}-productoId`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+        return false;
+      }
+      // cantidad m2
+      if (!p.cantidad || Number(p.cantidad) <= 0) {
+        setErrorMsg(`Ingresa los m² totales (> 0) para el producto #${i + 1}.`);
+        const el = document.getElementById(`prod-${i}-cantidad`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // CRUD Cotizaciones
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+    const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!user || !user.ID) {
+      setErrorMsg("No se encontró el usuario autenticado. Inicia sesión.");
+      return;
+    }
+    if (!validateFormAndFocus()) return;
+
+    try {
+      // Calcular totales locales
+      const subtotal = (form.productos || []).reduce((acc, it) => {
+        const pr = productos.find((p) => p.ID === it.productoId);
+        const precioM2 = Number(pr?.precio || 0);
+        const cantM2 = Number(it.cantidad || 0);
+        return acc + precioM2 * cantM2;
+      }, 0);
+      const ivaVal = form.incluir_iva ? subtotal * 0.16 : 0;
+      const total = subtotal + ivaVal;
+
+      const cleanForm = {
+        nombre: form.nombre,
+        incluir_iva: !!form.incluir_iva,
+        subtotal: Number(subtotal.toFixed(2)),
+        iva: Number(ivaVal.toFixed(2)),
+        total: Number(total.toFixed(2)),
+        ID_usuario: user.ID,
+        ID_cliente: form.ID_cliente,
+        productos: form.productos.map((p) => ({
+          productoId: p.productoId,
+          cantidad: p.cantidad, // m² totales
+          tipo_medida: "m2",
+          descripcion: p.descripcion,
+        })),
+        anticipo: form.anticipo || 0,
+        status: form.status || "pendiente",
+      };
+
+      const res = await fetch(API_COTIZACIONES, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(cleanForm),
+      });
+
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = {
+          success: false,
+          message:
+            txt && txt.trim().startsWith("<")
+              ? "El servidor respondió con un error (HTML). Intenta más tarde."
+              : txt,
+        };
+      }
+      if (!res.ok || data?.success === false) {
+        const msg = data?.message || data?.error || "Error al crear cotización";
+        setErrorMsg(msg);
+        setTimeout(() => focusAccordingToError(msg), 50);
+        return;
+      }
+
+      closeModal();
+      setForm(initialCotizacion);
+      await fetchAll();
+    } catch (err) {
+      console.error("crear cotización error:", err);
+      const msg = err?.message || "Error al crear la cotización";
+      setErrorMsg(msg);
+      setTimeout(() => focusAccordingToError(msg), 50);
+    }
+  };
+  void handleAdd;
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (!editTarget) {
+      setErrorMsg("No hay cotización seleccionada");
+      return;
+    }
+    if (!validateFormAndFocus()) return;
+
+    const id = editTarget.ID || editTarget.id;
+    const token = localStorage.getItem("token");
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+
+    // Preparar payload
+    // Recalcular totales locales
+    const subtotal = (form.productos || []).reduce((acc, it) => {
+      const pr = productos.find((p) => p.ID === it.productoId);
+      const precioM2 = Number(pr?.precio || 0);
+      const cantM2 = Number(it.cantidad || 0);
+      return acc + precioM2 * cantM2;
+    }, 0);
+    const ivaVal = form.incluir_iva ? subtotal * 0.16 : 0;
+    const total = subtotal + ivaVal;
+
+    const payload = {
+      nombre: form.nombre,
+      incluir_iva: !!form.incluir_iva,
+      subtotal: Number(subtotal.toFixed(2)),
+      iva: Number(ivaVal.toFixed(2)),
+      total: Number(total.toFixed(2)),
+      ID_cliente: form.ID_cliente,
+      productos: form.productos.map((p) => ({
+        productoId: p.productoId,
+        cantidad: p.cantidad, // m² totales
+        tipo_medida: "m2",
+        descripcion: p.descripcion,
+      })),
+      anticipo: form.anticipo,
+      status: form.status,
+    };
+
+    try {
+      const res = await fetch(`${API_COTIZACIONES}/${id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = {
+          success: false,
+          message:
+            txt && txt.trim().startsWith("<")
+              ? "El servidor respondió con un error (HTML). Intenta más tarde."
+              : txt,
+        };
+      }
+      if (!res.ok || data?.success === false) {
+        const msg =
+          data?.message || data?.error || "No se pudo actualizar la cotización";
+        setErrorMsg(msg);
+        setTimeout(() => focusAccordingToError(msg), 50);
+        return;
+      }
+
+      // Guardar flag de ajuste si el backend reporta delta aplicado
+      const applied =
+        Boolean(data?.data?.ajusteInventarioAplicado) ||
+        (Array.isArray(data?.data?.ajustes) &&
+          data.data.ajustes.some((a) => a && a.deltaPiezas));
+      setAdjustFlags((prev) => ({ ...prev, [id]: applied }));
+      if (Array.isArray(data?.data?.ajustes)) {
+        // Legacy: setAdjustSummaries removed; if ajustes data needed later, store via dedicated state hook.
+      }
+
+      // Inventario: ahora se ajusta automáticamente en el backend por DIFERENCIAS
+      // (aumentos descuentan stock y generan residuo; reducciones regresan piezas).
+      // Ya no recalculamos/confirmamos desde el frontend aquí para evitar doble descuento.
+
+      setModalOpen(null);
+      setEditTarget(null);
+      setForm(initialCotizacion);
+      await fetchAll();
+    } catch (err) {
+      setErrorMsg(err.message || "Error al editar la cotización");
+    }
+  };
+
+  // Evita warning de variable sin usar si el modal de edición no se monta en ciertos estados
+  void handleEdit;
+
+  // Confirmar venta: no descuenta inventario automáticamente. Mantiene regla de >=70% para cambiar estado,
+  // pero se permite abonar libremente antes de llegar al umbral.
+  const handleConfirmVenta = async (liquidar = false) => {
+    if (!ventaResumen) return;
+    setErrorMsg("");
+    const token = localStorage.getItem("token");
+    const id = ventaResumen.ID || ventaResumen.id;
+    try {
+      // 1) Obtener detalles actuales
+      const resDet = await fetch(`${API_COTIZACIONES}/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      const txtDet = await resDet.text();
+      let dataDet;
+      try {
+        dataDet = JSON.parse(txtDet);
+      } catch {
+        dataDet = { success: false, message: txtDet };
+      }
+      if (!resDet.ok || dataDet?.success === false)
+        throw new Error(
+          dataDet?.message || "No se pudo obtener detalles de la orden"
+        );
+      const payload = dataDet.data || dataDet;
+      const ord = payload.cotizacion || payload;
+      const totalOrder = Number(ord.total || 0);
+      let anticipoOrder = Number(ord.anticipo || 0);
+
+      // Si se desea liquidar, actualizar anticipo = total
+      if (liquidar && anticipoOrder < totalOrder) {
+        const resAntPre = await fetch(`${API_COTIZACIONES}/${id}/anticipo`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ anticipo: totalOrder }),
+        });
+        const txtAntPre = await resAntPre.text();
+        let dAntPre;
+        try {
+          dAntPre = JSON.parse(txtAntPre);
+        } catch {
+          dAntPre = { success: false, message: txtAntPre };
+        }
+        if (!resAntPre.ok || dAntPre?.success === false)
+          throw new Error(
+            dAntPre?.message || "No se pudo liquidar antes de confirmar"
+          );
+        anticipoOrder = totalOrder;
+      }
+
+      // Validar anticipo mínimo 70% solo para confirmar estado; si no alcanza, salir silenciosamente
+      const percentAfter =
+        totalOrder > 0 ? (anticipoOrder / totalOrder) * 100 : 0;
+      if (percentAfter < 70) {
+        return;
+      }
+      // 2) Actualizar estado de la orden (sin tocar inventario)
+      const newStatus = percentAfter >= 100 ? "pagado" : "en_proceso";
+      const resSt = await fetch(`${API_COTIZACIONES}/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const txtSt = await resSt.text();
+      let dSt;
+      try {
+        dSt = JSON.parse(txtSt);
+      } catch {
+        dSt = { success: false, message: txtSt };
+      }
+      if (!resSt.ok || dSt?.success === false)
+        throw new Error(
+          dSt?.message || "No se pudo actualizar el estado de la venta"
+        );
+
+      // 3) Mostrar resumen/instrucción manual
+      setConfirmSummary({
+        nota_manual: true,
+        status_aplicado: newStatus,
+      });
+      setConfirmSummaryOpen(true);
+      setModalOpen(null);
+      setVentaResumen(null);
+      await fetchAll();
+    } catch (e) {
+      setErrorMsg(e.message || "No se puede realizar la venta");
+      setTimeout(() => focusAccordingToError(e.message || ""), 50);
+    }
+  };
+
+  // Duplicar cotización (para canceladas/pagadas o reordenar)
+  const handleDuplicar = async (cot) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_COTIZACIONES}/${cot.ID || cot.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(data?.message || "No se pudieron cargar los detalles");
+      const payload = data.data || data;
+      const productosDetalle = Array.isArray(payload?.productos)
+        ? payload.productos
+        : [];
+      const mapped = productosDetalle.map((p) => ({
+        productoId: p.productoId || p.Producto?.ID || p.ID_producto || "",
+        cantidad: p.cantidad || 1,
+        tipoFigura: p.tipoFigura || p.tipo_figura || "rectangulo",
+        base: p.base ?? null,
+        altura: p.altura ?? null,
+        radio: p.radio ?? null,
+        base2: p.base2 ?? null,
+        altura2: p.altura2 ?? null,
+        soclo_base: p.soclo_base ?? null,
+        soclo_altura: p.soclo_altura ?? null,
+        cubierta_base: p.cubierta_base ?? null,
+        cubierta_altura: p.cubierta_altura ?? null,
+        descripcion: p.descripcion ?? "",
+      }));
+      setForm({
+        ID_cliente: cot.ID_cliente || "",
+        productos: mapped,
+        anticipo: 0,
+        status: "pendiente",
+      });
+      setErrorMsg("");
+      setModalOpen("add");
+      setTimeout(() => {
+        const el = document.getElementById("cliente-select");
+        if (el) el.focus();
+      }, 50);
+    } catch (err) {
+      setErrorMsg(err.message || "No se pudo duplicar la cotización");
+    }
+  };
+
+  // Actualizar estado de una cotización
+  const updateStatus = async (cot, newStatus) => {
+    try {
+      const token = localStorage.getItem("token");
+      const id = cot.ID || cot.id;
+      const res = await fetch(`${API_COTIZACIONES}/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { success: false, message: txt };
+      }
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.message || "No se pudo actualizar el estado");
+      }
+      await fetchAll();
+    } catch (err) {
+      setErrorMsg(err.message || "No se pudo actualizar el estado");
+    }
+  };
+
+  const handleGenerarPDF = async (cotId) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setErrorMsg(
+          "No se encontró token de autenticación. Por favor, inicia sesión nuevamente."
+        );
+        return;
+      }
+
+      // Mostrar indicador de carga
+      setLoading(true);
+
+      // Hacer la petición con el token de autenticación
+      const response = await fetch(`${API_COTIZACIONES}/${cotId}/factura`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/pdf",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Error al generar PDF: ${response.status} ${response.statusText}`
+        );
+      }
+
+      // Obtener el PDF como blob
+      const blob = await response.blob();
+
+      // Crear URL temporal para el blob
+      const url = window.URL.createObjectURL(blob);
+
+      // Crear elemento 'a' temporal para la descarga
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `factura_orden_${cotId}.pdf`;
+
+      // Agregar al DOM, hacer click y remover
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Limpiar la URL temporal
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error al generar PDF:", error);
+      setErrorMsg(`Error al generar el PDF: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const token = localStorage.getItem("token");
+    try {
+      // Preferimos marcar como cancelado en lugar de borrar físicamente
+      const res = await fetch(`${API_COTIZACIONES}/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: "cancelado" }),
+      });
+      const txt = await res.text();
+      let data;
+      try {
+        data = JSON.parse(txt);
+      } catch {
+        data = { message: txt };
+      }
+      if (!res.ok || data?.success === false)
+        throw new Error(
+          data?.mensaje || data?.message || "No se pudo cancelar la cotización"
+        );
+      await fetchAll();
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+    } catch (err) {
+      setErrorMsg(err.message || "No se pudo cancelar la cotización");
+    }
+  };
+
+  // Navbar/Logout
+  const handleLogout = () => {
+    setMenuOpen(false);
+    setShowLogoutConfirm(true);
+  };
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/");
+  };
+  const cancelLogout = () => setShowLogoutConfirm(false);
+  const handleConfig = () => {
+    setMenuOpen(false);
+    navigate("/config");
+  };
+
+  // Función para generar reporte de ventas
+  const generateSalesReport = () => {
+    setReportLoading(true);
+    setReportData(null);
+    
+    try {
+      // Filtrar cotizaciones según criterios
+      let filteredCotizaciones = [...cotizaciones];
+      
+      // Filtro por cliente
+      if (reportFilters.cliente && reportFilters.cliente !== 'all') {
+        filteredCotizaciones = filteredCotizaciones.filter(
+          cot => Number(cot.ID_cliente) === Number(reportFilters.cliente)
+        );
+      }
+      
+      // Filtro por fechas
+      if (reportFilters.fechaInicio) {
+        const fechaInicio = new Date(reportFilters.fechaInicio);
+        filteredCotizaciones = filteredCotizaciones.filter(cot => {
+          const fechaCot = new Date(cot.fecha_creacion || cot.createdAt);
+          return fechaCot >= fechaInicio;
+        });
+      }
+      
+      if (reportFilters.fechaFin) {
+        const fechaFin = new Date(reportFilters.fechaFin);
+        fechaFin.setHours(23, 59, 59, 999); // Incluir todo el día
+        filteredCotizaciones = filteredCotizaciones.filter(cot => {
+          const fechaCot = new Date(cot.fecha_creacion || cot.createdAt);
+          return fechaCot <= fechaFin;
+        });
+      }
+      
+      // Filtro por estados
+      if (reportFilters.estados.length > 0) {
+        filteredCotizaciones = filteredCotizaciones.filter(cot => 
+          reportFilters.estados.includes(cot.status)
+        );
+      }
+      
+      // Calcular estadísticas
+      const totalCotizaciones = filteredCotizaciones.length;
+      const totalVentas = filteredCotizaciones.reduce((sum, cot) => sum + Number(cot.total || 0), 0);
+      const totalAnticipos = filteredCotizaciones.reduce((sum, cot) => sum + Number(cot.anticipo || 0), 0);
+      const totalPendiente = totalVentas - totalAnticipos;
+      
+      // Agrupar por estado
+      const porEstado = {};
+      reportFilters.estados.forEach(estado => {
+        const cotsEstado = filteredCotizaciones.filter(cot => cot.status === estado);
+        porEstado[estado] = {
+          cantidad: cotsEstado.length,
+          total: cotsEstado.reduce((sum, cot) => sum + Number(cot.total || 0), 0),
+          anticipos: cotsEstado.reduce((sum, cot) => sum + Number(cot.anticipo || 0), 0)
+        };
+      });
+      
+      // Agrupar por cliente si se seleccionó "todos"
+      const porCliente = {};
+      if (reportFilters.cliente === 'all') {
+        filteredCotizaciones.forEach(cot => {
+          const clienteId = cot.ID_cliente;
+          const cliente = clientes.find(c => c.ID === clienteId);
+          const nombreCliente = cliente?.nombre || `Cliente ${clienteId}`;
+          
+          if (!porCliente[clienteId]) {
+            porCliente[clienteId] = {
+              nombre: nombreCliente,
+              cantidad: 0,
+              total: 0,
+              anticipos: 0
+            };
+          }
+          
+          porCliente[clienteId].cantidad++;
+          porCliente[clienteId].total += Number(cot.total || 0);
+          porCliente[clienteId].anticipos += Number(cot.anticipo || 0);
+        });
+      }
+      
+      setReportData({
+        cotizaciones: filteredCotizaciones,
+        resumen: {
+          totalCotizaciones,
+          totalVentas,
+          totalAnticipos,
+          totalPendiente,
+          porEstado,
+          porCliente: Object.values(porCliente)
+        },
+        filtros: { ...reportFilters },
+        fechaGeneracion: new Date().toLocaleString('es-MX')
+      });
+      
+    } catch (error) {
+      console.error('Error al generar reporte:', error);
+      setErrorMsg('Error al generar el reporte de ventas');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+  
+  // Función para abrir modal de reportes
+  const openReportModal = () => {
+    setReportOpen(true);
+    setReportData(null);
+    setErrorMsg('');
+  };
+  
+  // Función para cerrar reporte
+  const closeReport = () => {
+    setReportOpen(false);
+    setReportData(null);
+  };
+
+  // Render
+  return (
+    <div className="-bg">
+      <nav className="main-navbar guinda-navbar">
+        <div className="nav-container">
+          <div className="nav-left">
+            <div
+              className="nav-logo mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+            >
+              <img
+                src="https://irp.cdn-website.com/d7ba7f52/dms3rep/multi/265.png"
+                alt="Logo"
+                className="logo-img"
+              />
+              <div className="nav-title">VENTAS</div>
+            </div>
+            <header className="header">
+              <h1>
+                VENTAS <FaMoneyCheckAlt className="iconName" />
+              </h1>
+            </header>
+            <div className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`}>
+              <button
+                className={`nav-btn${
+                  location.pathname === "/home" ? " nav-btn-active" : ""
+                }`}
+                onClick={() => navigate("/home")}
+              >
+                Inicio
+              </button>
+              <button
+                className={`nav-btn${
+                  location.pathname === "/inventario" ? " nav-btn-active" : ""
+                }`}
+                onClick={() => navigate("/inventario")}
+              >
+                Inventario
+              </button>
+              <button
+                className={`nav-btn${
+                  location.pathname === "/ventas" ? " nav-btn-active" : ""
+                }`}
+                onClick={() => navigate("/ventas")}
+              >
+                Ventas
+              </button>
+              <button
+                className={`nav-btn${
+                  location.pathname === "/clientes" ? " nav-btn-active" : ""
+                }`}
+                onClick={() => navigate("/clientes")}
+              >
+                Clientes
+              </button>
+              {isAdmin && (
+                <button
+                  className={`nav-btn${
+                    location.pathname === "/usuarios" ? " nav-btn-active" : ""
+                  }`}
+                  onClick={() => navigate("/usuarios")}
+                >
+                  Usuarios
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="nav-center">
+            <button
+              className={`nav-btn${
+                location.pathname === "/home" ? " nav-btn-active" : ""
+              }`}
+              onClick={() => navigate("/home")}
+            >
+              Inicio
+            </button>
+            <button
+              className={`nav-btn${
+                location.pathname === "/inventario" ? " nav-btn-active" : ""
+              }`}
+              onClick={() => navigate("/inventario")}
+            >
+              Inventario
+            </button>
+            <button
+              className={`nav-btn${
+                location.pathname === "/ventas" ? " nav-btn-active" : ""
+              }`}
+              onClick={() => navigate("/ventas")}
+            >
+              Ventas
+            </button>
+            <button
+              className={`nav-btn${
+                location.pathname === "/clientes" ? " nav-btn-active" : ""
+              }`}
+              onClick={() => navigate("/clientes")}
+            >
+              Clientes
+            </button>
+            {isAdmin && (
+              <button
+                className={`nav-btn${
+                  location.pathname === "/usuarios" ? " nav-btn-active" : ""
+                }`}
+                onClick={() => navigate("/usuarios")}
+              >
+                Usuarios
+              </button>
+            )}
+          </div>
+          <div className="nav-datetime">
+            <span>{dateStr}</span>
+            <span>{timeStr}</span>
+          </div>
+          <div className="nav-user" ref={menuRef}>
+            <button className="user-btn" onClick={() => setMenuOpen((v) => !v)}>
+              <FaUser size={28} color="#fff" />
+            </button>
+            {userName && (
+              <span
+                className="user-name"
+                style={{
+                  color: "#fff",
+                  fontWeight: "bold",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {userName}
+              </span>
+            )}
+            {menuOpen && (
+              <div className="user-menu">
+                <button onClick={handleConfig}>Configuración</button>
+                <button onClick={handleLogout}>Cerrar sesión</button>
+              </div>
+            )}
+            {showLogoutConfirm && (
+              <div className="modal-overlay" style={{ zIndex: 2000 }}>
+                <div
+                  className="modal-content"
+                  style={{
+                    maxWidth: 340,
+                    padding: "2rem 1.5rem",
+                    textAlign: "center",
+                  }}
+                >
+                  <h2
+                    style={{
+                      color: "#a30015",
+                      fontWeight: 800,
+                      fontSize: "1.15rem",
+                      marginBottom: 18,
+                    }}
+                  >
+                    ¿Cerrar sesión?
+                  </h2>
+                  <p
+                    style={{
+                      color: "#7b1531",
+                      marginBottom: 22,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ¿Estás seguro de que deseas cerrar sesión?
+                  </p>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      justifyContent: "center",
+                    }}
+                  >
+                    <button
+                      className="delete-btn"
+                      style={{ minWidth: 90 }}
+                      onClick={confirmLogout}
+                    >
+                      Cerrar sesión
+                    </button>
+                    <button
+                      className="cancel-btn"
+                      style={{ minWidth: 90 }}
+                      onClick={cancelLogout}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <div
+        style={{
+          padding: 24,
+          paddingTop: "calc(var(--navbar-offset) + 2px)",
+          maxWidth: 1100,
+          margin: "0 auto",
+        }}
+      >
+        <div className="top-actions">
+          <button className="open-add-modal-btn" onClick={openAddModal}>
+            <FaPlus style={{ marginRight: 8 }} /> Nueva Cotización
+          </button>
+          <button className="report-btn" onClick={openReportModal} style={{
+            background: "#1e40af",
+            color: "white",
+            border: "none",
+            padding: "0.6rem 1.2rem",
+            borderRadius: 8,
+            fontWeight: 600,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            marginLeft: "0.5rem"
+          }}>
+            <FaFilePdf style={{ fontSize: "1rem" }} /> Reportes de Ventas
+          </button>
+        </div>
+        {/* Mensajes de error globales (fuera de modales) */}
+        {errorMsg && !modalOpen && !detailsOpen && !reportOpen && (
+          <div
+            style={{
+              background: "#ffe5e9",
+              color: "#a30015",
+              padding: "0.75rem 1rem",
+              border: "1px solid #a30015",
+              borderRadius: 8,
+              fontWeight: 600,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>{errorMsg}</span>
+            {errorMsg.includes("Sesión inválida") && (
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                style={{
+                  background: "#a30015",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Ir al login
+              </button>
+            )}
+          </div>
+        )}
+        {/* Barra de filtros (estilo igual al de Usuarios) */}
+        <div
+          className="users-table-filter-row"
+          style={{ margin: 0, marginBottom: 10 }}
+        >
+          <div className="users-filter-title">Filtrar por:</div>
+          <select
+            className="users-table-filter-select"
+            value={cotFilterField}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCotFilterField(v);
+              setCotFilterText("");
+              setDateStart("");
+              setDateEnd("");
+            }}
+          >
+            <option value="cliente">Cliente</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="estado">Estado</option>
+            <option value="id">ID</option>
+            <option value="fecha">Fecha</option>
+          </select>
+          {cotFilterField === "estado" ? (
+            <select
+              className="users-table-filter-input"
+              value={cotFilterText}
+              onChange={(e) => setCotFilterText(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="pagado">Pagado</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="en_proceso">En proceso</option>
+              <option value="fabricado">Fabricado</option>
+              <option value="espera_material">En espera de material</option>
+              <option value="entregado">Entregado</option>
+            </select>
+          ) : cotFilterField === "fecha" ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                type="date"
+                className="users-table-filter-input"
+                value={dateStart}
+                onChange={(e) => setDateStart(e.target.value)}
+              />
+              <span style={{ alignSelf: "center", color: "#555" }}>a</span>
+              <input
+                type="date"
+                className="users-table-filter-input"
+                value={dateEnd}
+                onChange={(e) => setDateEnd(e.target.value)}
+              />
+            </div>
+          ) : (
+            <input
+              className="users-table-filter-input"
+              placeholder="Escribe para filtrar…"
+              value={cotFilterText}
+              onChange={(e) => setCotFilterText(e.target.value)}
+            />
+          )}
+          <div
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span className="users-filter-title" style={{ marginLeft: 6 }}>
+              Orden:
+            </span>
+            <select
+              className="users-table-filter-select"
+              value={cotOrder}
+              onChange={(e) => setCotOrder(e.target.value)}
+            >
+              <option value="recientes">Más recientes</option>
+              <option value="antiguos">Más antiguos</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            className="users-filter-clear-btn"
+            onClick={() => {
+              setCotFilterText("");
+              setDateStart("");
+              setDateEnd("");
+              setCotOrder("recientes");
+              setCotFilterField("cliente");
+            }}
+            title="Limpiar filtro"
+          >
+            <FaTimes /> Limpiar
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 8, margin: "8px 0" }}>
+          <button
+            type="button"
+            className="ventas-btn"
+            onClick={() => setReportOpen(true)}
+          >
+            Reporte por cliente
+          </button>
+        </div>
+        {/* Cotizaciones */}
+        <section className="cotizaciones-section">
+          <div style={{ overflowX: "auto" }}>
+            <table className="cotizaciones-table">
+              <thead>
+                <tr>
+                  <th>Título</th>
+                  <th>Cliente</th>
+                  <th>Vendedor</th>
+                  <th>Fecha</th>
+                  <th>Anticipo</th>
+                  <th>% Ant.</th>
+                  <th>Total</th>
+                  <th>Resto</th>
+                  <th>Pago</th>
+                  <th>Abonos</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="9">Cargando...</td>
+                  </tr>
+                ) : cotizaciones.length === 0 ? (
+                  <tr>
+                    <td colSpan="9">No hay cotizaciones registradas</td>
+                  </tr>
+                ) : (
+                  // Filtrar y ordenar cotizaciones
+                  cotizaciones
+                    .filter((cot) => {
+                      const clienteNombre = (
+                        cot.Cliente?.nombre ||
+                        cot.cliente?.nombre ||
+                        ""
+                      ).toLowerCase();
+                      const vendedorNombre = (
+                        cot.Usuario?.nombre ||
+                        cot.usuario?.nombre ||
+                        ""
+                      ).toLowerCase();
+                      const estado = (cot.status || "").toLowerCase();
+                      const idStr = String(cot.ID || cot.id || "");
+                      const q = (cotFilterText || "").toLowerCase().trim();
+
+                      // Filtro por fecha (rango)
+                      if (cotFilterField === "fecha") {
+                        if (!dateStart && !dateEnd) return true;
+                        const t = new Date(
+                          cot.fecha_creacion || cot.createdAt || cot.fecha || 0
+                        ).getTime();
+                        if (!t) return false;
+                        const start = dateStart
+                          ? new Date(`${dateStart}T00:00:00`).getTime()
+                          : null;
+                        const end = dateEnd
+                          ? new Date(`${dateEnd}T23:59:59`).getTime()
+                          : null;
+                        if (start && end) return t >= start && t <= end;
+                        if (start && !end) return t >= start;
+                        if (!start && end) return t <= end;
+                        return true;
+                      }
+
+                      // Filtros por texto/estado/id
+                      if (!q) return true;
+                      switch (cotFilterField) {
+                        case "cliente":
+                          return clienteNombre.includes(q);
+                        case "vendedor":
+                          return vendedorNombre.includes(q);
+                        case "estado":
+                          return estado.includes(q);
+                        case "id":
+                          return idStr.includes(q);
+                        default:
+                          return true;
+                      }
+                    })
+                    .sort((a, b) => {
+                      const ta = new Date(
+                        a.fecha_creacion || a.createdAt || a.fecha || 0
+                      ).getTime();
+                      const tb = new Date(
+                        b.fecha_creacion || b.createdAt || b.fecha || 0
+                      ).getTime();
+                      if (cotOrder === "antiguos") return ta - tb;
+                      return tb - ta; // recientes primero
+                    })
+                    .map((cot) => {
+                      const cliente = cot.Cliente || cot.cliente || {};
+                      const usuario = cot.Usuario || cot.usuario || {};
+                      const fecha = cot.fecha_creacion
+                        ? new Date(cot.fecha_creacion).toLocaleDateString()
+                        : "";
+                      const anticipo = Number(cot.anticipo || 0);
+                      const total = Number(cot.total || 0);
+                      const resto = (total - anticipo).toFixed(2);
+                      const pctAnt = total > 0 ? (anticipo / total) * 100 : 0;
+                      // Badge pago
+                      let pagoBadge = "No pagado";
+                      let pagoColor = "#c0392b";
+                      if (anticipo >= total && total > 0) {
+                        pagoBadge = "Liquidado";
+                        pagoColor = "#2ecc71";
+                      } else if (pctAnt >= 70) {
+                        pagoBadge = "≥70%";
+                        pagoColor = "#27ae60";
+                      } else if (anticipo > 0) {
+                        pagoBadge = "Parcial";
+                        pagoColor = "#f39c12";
+                      }
+                      const abonosCount = cot.abonos_count || 0;
+                      const ultimoAbonoFecha = cot.ultimo_abono_fecha
+                        ? new Date(cot.ultimo_abono_fecha).toLocaleDateString()
+                        : "-";
+                      const ultimoAbonoMonto =
+                        cot.ultimo_abono_monto != null
+                          ? Number(cot.ultimo_abono_monto).toFixed(2)
+                          : null;
+                      const rawStatus = (cot.status || "").toLowerCase();
+                      const statusClass = `status-badge status-${rawStatus}`;
+                      return (
+                        <tr key={cot.ID || cot.id}>
+                          <td>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                              }}
+                            >
+                              <strong>
+                                {cot.nombre || cot.titulo || "(sin título)"}
+                              </strong>
+                              <small style={{ color: "#666" }}>
+                                Cotización #{cot.ID || cot.id}
+                              </small>
+                            </div>
+                          </td>
+                          <td>{cliente.nombre || "-"}</td>
+                          <td>{usuario.nombre || "-"}</td>
+                          <td>{fecha}</td>
+                          <td>${anticipo.toFixed(2)}</td>
+                          <td>{pctAnt.toFixed(1)}%</td>
+                          <td>${total.toFixed(2)}</td>
+                          <td>${resto}</td>
+                          <td>
+                            <span
+                              style={{
+                                background: pagoColor,
+                                color: "#fff",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                fontSize: ".7rem",
+                              }}
+                            >
+                              {pagoBadge}
+                            </span>
+                          </td>
+                          <td>
+                            {abonosCount === 0 ? (
+                              "0"
+                            ) : (
+                              <span
+                                title={`Último: ${ultimoAbonoFecha}${
+                                  ultimoAbonoMonto
+                                    ? ` • $${ultimoAbonoMonto}`
+                                    : ""
+                                }`}
+                              >
+                                {abonosCount}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {cot.status ? (
+                              <span className={statusClass}>
+                                {renderStatus(cot.status)}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                          <td>
+                            <div className="table-actions">
+                              {cot.status === "pendiente" ? (
+                                <>
+                                  <button
+                                    className="edit-btn"
+                                    title="Editar"
+                                    onClick={() => openEditModal(cot)}
+                                  >
+                                    <FaEdit />
+                                  </button>
+                                  <button
+                                    className="delete-btn"
+                                    title="Cancelar"
+                                    onClick={() => {
+                                      setDeleteTarget(cot);
+                                      setShowDeleteConfirm(true);
+                                    }}
+                                  >
+                                    <FaTrash />
+                                  </button>
+                                  <button
+                                    className="ventas-btn"
+                                    title="Ver detalles"
+                                    onClick={() => openDetails(cot)}
+                                  >
+                                    <FaEye /> Detalles
+                                  </button>
+                                  <button
+                                    className="ventas-btn"
+                                    title="Confirmar venta"
+                                    onClick={() => openConfirmVenta(cot)}
+                                  >
+                                    Venta
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    className="ventas-btn"
+                                    title="Ver detalles"
+                                    onClick={() => openDetails(cot)}
+                                  >
+                                    <FaEye />
+                                  </button>
+                                  {rawStatus === "pendiente" && (
+                                    <button
+                                      className="ventas-btn"
+                                      title="Marcar en proceso"
+                                      onClick={() =>
+                                        updateStatus(cot, "en_proceso")
+                                      }
+                                    >
+                                      En proceso
+                                    </button>
+                                  )}
+                                  {rawStatus === "en_proceso" && (
+                                    <>
+                                      <button
+                                        className="ventas-btn"
+                                        title="Marcar fabricado"
+                                        onClick={() =>
+                                          updateStatus(cot, "fabricado")
+                                        }
+                                      >
+                                        Fab.
+                                      </button>
+                                      <button
+                                        className="ventas-btn"
+                                        title="Marcar en espera de material"
+                                        onClick={() =>
+                                          updateStatus(cot, "espera_material")
+                                        }
+                                      >
+                                        Espera
+                                      </button>
+                                    </>
+                                  )}
+                                  {rawStatus === "fabricado" && (
+                                    <>
+                                      <button
+                                        className="ventas-btn"
+                                        title="Marcar en espera de material"
+                                        onClick={() =>
+                                          updateStatus(cot, "espera_material")
+                                        }
+                                      >
+                                        Espera
+                                      </button>
+                                      <button
+                                        className="ventas-btn"
+                                        title="Marcar entregado"
+                                        onClick={() =>
+                                          updateStatus(cot, "entregado")
+                                        }
+                                      >
+                                        Entreg.
+                                      </button>
+                                    </>
+                                  )}
+                                  {rawStatus === "espera_material" && (
+                                    <button
+                                      className="ventas-btn"
+                                      title="Marcar fabricado"
+                                      onClick={() =>
+                                        updateStatus(cot, "fabricado")
+                                      }
+                                    >
+                                      Fab.
+                                    </button>
+                                  )}
+                                  {rawStatus === "entregado" && (
+                                    <span style={{ color: "#166534", fontWeight: 600, fontSize: "0.8rem" }}>
+                                      ✓ OK
+                                    </span>
+                                  )}
+                                  <button
+                                    className="duplicate-btn"
+                                    title="Duplicar cotización"
+                                    onClick={() => handleDuplicar(cot)}
+                                  >
+                                    <FaCopy /> Dup.
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                className="pdf-btn"
+                                title="Generar PDF"
+                                onClick={() => handleGenerarPDF(cot.ID || cot.id)}
+                              >
+                                <FaFilePdf /> PDF
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Reporte global por cliente */}
+        {reportOpen && (
+          <div className="modal-overlay" onClick={() => setReportOpen(false)}>
+            <div
+              className="modal-content"
+              style={{ width: 720, maxWidth: "95vw" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  onClick={() => setReportOpen(false)}
+                />
+              </div>
+              <h2 style={{ marginTop: 0 }}>Ventas por cliente</h2>
+              {(() => {
+                const rows = new Map();
+                for (const cot of cotizaciones) {
+                  const cliente = cot.Cliente || cot.cliente || {};
+                  const key =
+                    cliente.ID || cliente.id || cliente.nombre || "Desconocido";
+                  const nombre = cliente.nombre || "Desconocido";
+                  const total = Number(cot.total || 0);
+                  const anticipo = Number(cot.anticipo || 0);
+                  const saldo = total - anticipo;
+                  const prev = rows.get(key) || {
+                    nombre,
+                    pedidos: 0,
+                    total: 0,
+                    anticipo: 0,
+                    saldo: 0,
+                  };
+                  prev.pedidos += 1;
+                  prev.total += total;
+                  prev.anticipo += anticipo;
+                  prev.saldo += saldo;
+                  rows.set(key, prev);
+                }
+                const arr = Array.from(rows.values()).sort(
+                  (a, b) => b.total - a.total
+                );
+                if (arr.length === 0) return <p>No hay datos.</p>;
+                const totales = arr.reduce(
+                  (acc, r) => ({
+                    pedidos: acc.pedidos + r.pedidos,
+                    total: acc.total + r.total,
+                    anticipo: acc.anticipo + r.anticipo,
+                    saldo: acc.saldo + r.saldo,
+                  }),
+                  { pedidos: 0, total: 0, anticipo: 0, saldo: 0 }
+                );
+                return (
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="ventas-table" style={{ minWidth: 640 }}>
+                      <thead>
+                        <tr>
+                          <th>Cliente</th>
+                          <th>Pedidos</th>
+                          <th>Total</th>
+                          <th>Anticipos</th>
+                          <th>Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {arr.map((r) => (
+                          <tr key={r.nombre}>
+                            <td>{r.nombre}</td>
+                            <td>{r.pedidos}</td>
+                            <td>${r.total.toFixed(2)}</td>
+                            <td>${r.anticipo.toFixed(2)}</td>
+                            <td>${r.saldo.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td>
+                            <strong>TOTALES</strong>
+                          </td>
+                          <td>
+                            <strong>{totales.pedidos}</strong>
+                          </td>
+                          <td>
+                            <strong>${totales.total.toFixed(2)}</strong>
+                          </td>
+                          <td>
+                            <strong>${totales.anticipo.toFixed(2)}</strong>
+                          </td>
+                          <td>
+                            <strong>${totales.saldo.toFixed(2)}</strong>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+              <div className="modal-btn-row" style={{ marginTop: 10 }}>
+                <button
+                  className="cancel-btn"
+                  onClick={() => setReportOpen(false)}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación de venta */}
+        {modalOpen === "confirmVenta" && ventaResumen && (
+          <div className="modal-overlay">
+            <div
+              className="modal-content"
+              style={{
+                width: 560,
+                maxWidth: "95vw",
+                maxHeight: "80vh",
+                overflowY: "auto",
+                color: "#222",
+                position: "relative",
+              }}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => setModalOpen(null)}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
+              <h2
+                style={{ fontSize: "1.15rem", marginBottom: 12, color: "#111" }}
+              >
+                Confirmar venta — Cotización #{ventaResumen.ID}
+              </h2>
+              {(() => {
+                const total = Number(ventaResumen.total || 0);
+                const anticipo = Number(ventaResumen.anticipo || 0);
+                const saldo = total - anticipo;
+                const pct = total > 0 ? (anticipo / total) * 100 : 0;
+                const clienteNombre =
+                  clientes.find((c) => c.ID === ventaResumen.ID_cliente)
+                    ?.nombre || "-";
+                const barraColor =
+                  pct >= 100
+                    ? "#2ecc71"
+                    : pct >= 70
+                    ? "#27ae60"
+                    : pct > 0
+                    ? "#f39c12"
+                    : "#c0392b";
+                return (
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      display: "grid",
+                      gap: 12,
+                      gridTemplateColumns: "1fr 1fr",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontSize: ".85rem" }}>
+                        <strong>Cliente:</strong> {clienteNombre}
+                      </div>
+                      <div style={{ fontSize: ".85rem" }}>
+                        <strong>Vendedor:</strong>{" "}
+                        {ventaResumen.vendedor || "-"}
+                      </div>
+                      <div style={{ fontSize: ".85rem" }}>
+                        <strong>Importe total:</strong> ${total.toFixed(2)}
+                      </div>
+                      <div style={{ fontSize: ".85rem" }}>
+                        <strong>Anticipo:</strong> ${anticipo.toFixed(2)} (
+                        {pct.toFixed(1)}%)
+                      </div>
+                      <div style={{ fontSize: ".85rem" }}>
+                        <strong>Saldo:</strong> ${saldo.toFixed(2)}
+                      </div>
+                      {pct < 70 && total > 0 && (
+                        <div
+                          style={{
+                            background: "#fff8e1",
+                            border: "1px solid #ffe58f",
+                            color: "#874d00",
+                            padding: "6px 8px",
+                            borderRadius: 6,
+                            fontSize: ".75rem",
+                          }}
+                        >
+                          Falta para 70%:{" "}
+                          <strong>
+                            ${(total * 0.7 - anticipo).toFixed(2)}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontSize: ".75rem", fontWeight: 600 }}>
+                        Progreso de pago
+                      </div>
+                      <div
+                        style={{
+                          height: 16,
+                          background: "#ecf0f1",
+                          borderRadius: 10,
+                          position: "relative",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${Math.min(100, pct).toFixed(2)}%`,
+                            background: barraColor,
+                            height: "100%",
+                            transition: "width .3s",
+                          }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: ".7rem",
+                            fontWeight: 700,
+                            color: pct > 15 ? "#fff" : "#2c3e50",
+                          }}
+                        >
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div style={{ fontSize: ".75rem", fontWeight: 600 }}>
+                        Productos
+                      </div>
+                      <div
+                        style={{
+                          background: "#f7f9fa",
+                          border: "1px solid #dde3e6",
+                          borderRadius: 6,
+                          padding: "6px 8px",
+                          maxHeight: 120,
+                          overflowY: "auto",
+                          fontSize: ".7rem",
+                        }}
+                      >
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {(ventaResumen.productos || []).map((p, i) => {
+                            const prod = productos.find(
+                              (pr) => pr.ID === p.productoId
+                            );
+                            return (
+                              <li key={i} style={{ marginBottom: 2 }}>
+                                {prod?.nombre || ""} • {p.cantidad} m²
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const total = Number(ventaResumen.total || 0);
+                const anticipo = Number(ventaResumen.anticipo || 0);
+                const pct = total > 0 ? (anticipo / total) * 100 : 0;
+                if (pct >= 70)
+                  return (
+                    <div
+                      style={{
+                        background: "#ecf9f1",
+                        border: "1px solid #b7e4cd",
+                        color: "#25694b",
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        marginBottom: 12,
+                        fontSize: ".7rem",
+                      }}
+                    >
+                      Umbral alcanzado: ya puedes confirmar la venta.
+                    </div>
+                  );
+                const sugerido = total * 0.7;
+                const falta = Math.max(0, sugerido - anticipo);
+                return (
+                  <div
+                    style={{
+                      background: "#fffdf5",
+                      border: "1px solid #f5e2b8",
+                      color: "#7a5c21",
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      marginBottom: 12,
+                      fontSize: ".7rem",
+                    }}
+                  >
+                    Aún no alcanza el umbral del 70% para confirmar la venta.
+                    Falta <strong>${falta.toFixed(2)}</strong>. Puedes seguir
+                    abonando cualquier monto y cuando llegues al 70% el botón
+                    Confirmar se habilitará.
+                  </div>
+                );
+              })()}
+              {Number(ventaResumen.anticipo || 0) <
+                Number(ventaResumen.total || 0) && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div>
+                    <label style={{ display: "block", fontWeight: 600 }}>
+                      Monto a abonar
+                    </label>
+                    <input
+                      className="user-input"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={confirmAbono}
+                      onChange={(e) => setConfirmAbono(e.target.value)}
+                    />
+                  </div>
+                  {(() => {
+                    const total = Number(ventaResumen.total || 0);
+                    const anticipo = Number(ventaResumen.anticipo || 0);
+                    const falta70 = Math.max(0, total * 0.7 - anticipo);
+                    const saldoTotal = Math.max(0, total - anticipo);
+                    if (saldoTotal <= 0) return null;
+                    return (
+                      <div
+                        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+                      >
+                        {falta70 > 0 && (
+                          <button
+                            type="button"
+                            className="ventas-btn"
+                            onClick={() => {
+                              setConfirmAbono(falta70.toFixed(2));
+                              setConfirmObs(
+                                `Abono para alcanzar 70% (faltaban $${falta70.toFixed(
+                                  2
+                                )})`
+                              );
+                            }}
+                          >
+                            Abonar hasta 70% (${falta70.toFixed(2)})
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="add-btn"
+                          onClick={() => {
+                            setConfirmAbono(saldoTotal.toFixed(2));
+                            setConfirmObs(
+                              `Liquidación de saldo ($${saldoTotal.toFixed(2)})`
+                            );
+                          }}
+                        >
+                          Liquidar saldo (${saldoTotal.toFixed(2)})
+                        </button>
+                      </div>
+                    );
+                  })()}
+                  <div>
+                    <label style={{ display: "block", fontWeight: 600 }}>
+                      Observaciones (opcional)
+                    </label>
+                    <textarea
+                      className="user-input"
+                      rows={2}
+                      value={confirmObs}
+                      onChange={(e) => setConfirmObs(e.target.value)}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      justifyContent: "stretch",
+                    }}
+                  >
+                    <button
+                      className="add-btn"
+                      style={{ flexBasis: "100%", fontSize: "1rem" }}
+                      disabled={confirmLoading}
+                      onClick={handleAgregarAnticipo}
+                    >
+                      {confirmLoading ? "Guardando…" : "Agregar anticipo"}
+                    </button>
+                  </div>
+                  {(() => {
+                    // Mostrar resumen histórico rápido si está en ventaResumen
+                    const historial = ventaResumen.historialAnticipos || [];
+                    if (!Array.isArray(historial) || historial.length === 0)
+                      return null;
+                    const totalAbonos = historial.reduce(
+                      (acc, h) => acc + Number(h.monto || 0),
+                      0
+                    );
+                    return (
+                      <div
+                        style={{
+                          background: "#f7f9fa",
+                          border: "1px solid #dde3e6",
+                          padding: "8px 10px",
+                          borderRadius: 6,
+                          fontSize: ".7rem",
+                        }}
+                      >
+                        <strong>Historial de abonos:</strong>
+                        <table
+                          style={{
+                            width: "100%",
+                            fontSize: ".65rem",
+                            marginTop: 6,
+                          }}
+                        >
+                          <thead>
+                            <tr style={{ textAlign: "left" }}>
+                              <th style={{ padding: "2px 4px" }}>Fecha</th>
+                              <th style={{ padding: "2px 4px" }}>Monto</th>
+                              <th style={{ padding: "2px 4px" }}>Obs.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {historial
+                              .slice(-5)
+                              .reverse()
+                              .map((h, i) => (
+                                <tr key={i}>
+                                  <td style={{ padding: "2px 4px" }}>
+                                    {new Date(
+                                      h.fecha ||
+                                        h.createdAt ||
+                                        h.updatedAt ||
+                                        Date.now()
+                                    ).toLocaleDateString()}
+                                  </td>
+                                  <td style={{ padding: "2px 4px" }}>
+                                    ${Number(h.monto || 0).toFixed(2)}
+                                  </td>
+                                  <td style={{ padding: "2px 4px" }}>
+                                    {h.observaciones?.slice(0, 20) || "-"}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <td style={{ padding: "2px 4px" }}>Total</td>
+                              <td style={{ padding: "2px 4px" }}>
+                                ${totalAbonos.toFixed(2)}
+                              </td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              {errorMsg && (
+                <div style={{ color: "#a30015", marginBottom: 8 }}>
+                  {errorMsg}
+                </div>
+              )}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  marginTop: 18,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  className="cancel-btn"
+                  style={{ flex: 1 }}
+                  onClick={() => setModalOpen(null)}
+                >
+                  <FaTimes style={{ marginRight: 6 }} /> Cancelar
+                </button>
+                {Number(ventaResumen.anticipo || 0) <
+                  Number(ventaResumen.total || 0) && (
+                  <button
+                    className="ventas-btn"
+                    style={{ flex: 1 }}
+                    title="Liquidar y confirmar"
+                    onClick={() => handleConfirmVenta(true)}
+                  >
+                    <FaSave style={{ marginRight: 6 }} /> Liquidar y confirmar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de crear/editar cotización */}
+        {(modalOpen === "add" || modalOpen === "edit") && (
+          <div className="modal-overlay" onClick={closeModal}>
+            <div
+              className="modal-content compact"
+              style={{
+                color: "#111",
+                width: "90vw",
+                maxWidth: 1200,
+                maxHeight: "85vh",
+                overflowY: "auto",
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header con título y botón cerrar */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingBottom: 12,
+                  borderBottom: "1px solid #e0e0e0",
+                  marginBottom: 12,
+                  position: "sticky",
+                  top: 0,
+                  background: "#fff",
+                  zIndex: 10,
+                }}
+              >
+                <h2 style={{ fontSize: "1.15rem", margin: 0, fontWeight: 700, color: "#7b1531" }}>
+                  {modalOpen === "edit"
+                    ? `Editar cotización #${editTarget?.ID || ""}`
+                    : "Nueva cotización"}
+                </h2>
+                <button
+                  className="modal-close-btn"
+                  title="Cerrar"
+                  aria-label="Cerrar"
+                  onClick={closeModal}
+                  style={{
+                    position: "relative",
+                    width: 32,
+                    height: 32,
+                    border: "none",
+                    background: "#f5f5f5",
+                    borderRadius: "50%",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "1.5rem",
+                    color: "#a30015",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.background = "#e0e0e0")}
+                  onMouseOut={(e) => (e.currentTarget.style.background = "#f5f5f5")}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {errorMsg && (
+                <div
+                  style={{
+                    background: "#ffe5e9",
+                    color: "#a30015",
+                    padding: "10px 12px",
+                    borderRadius: 6,
+                    marginBottom: 12,
+                    fontSize: "0.9rem",
+                    border: "1px solid #ffb3ba",
+                  }}
+                >
+                  {errorMsg}
+                </div>
+              )}
+
+              <form
+                onSubmit={modalOpen === "edit" ? handleEdit : handleAdd}
+                className="user-form"
+                style={{ flex: 1, display: "flex", flexDirection: "column" }}
+              >
+                {/* Sección 1: Información básica */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                    gap: 12,
+                    marginBottom: 14,
+                    padding: "12px",
+                    background: "#f9f9f9",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#555" }}>
+                      Título de cotización *
+                    </label>
+                    <input
+                      className="user-input"
+                      type="text"
+                      placeholder="Ej. Proyecto cocina López"
+                      value={form.nombre || ""}
+                      onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                      style={{ marginTop: 4, fontSize: "0.9rem" }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#555" }}>
+                      Cliente *
+                    </label>
+                    <select
+                      className="user-input"
+                      value={form.ID_cliente || ""}
+                      onChange={(e) => setForm({ ...form, ID_cliente: Number(e.target.value) })}
+                      style={{ marginTop: 4, fontSize: "0.9rem" }}
+                      required
+                    >
+                      <option value="">Selecciona un cliente…</option>
+                      {(clientes || []).map((c) => (
+                        <option key={c.ID} value={c.ID}>
+                          {c.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#555" }}>
+                      IVA
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, incluir_iva: !form.incluir_iva })}
+                      style={{
+                        width: "100%",
+                        marginTop: 4,
+                        background: form.incluir_iva ? "#27ae60" : "#bdc3c7",
+                        color: "#fff",
+                        border: "none",
+                        padding: "8px 10px",
+                        borderRadius: 6,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        fontSize: "0.85rem",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {form.incluir_iva ? "IVA 16%" : "Sin IVA"}
+                    </button>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#555" }}>
+                      Estado *
+                    </label>
+                    <select
+                      className="user-input"
+                      value={form.status || "pendiente"}
+                      onChange={(e) => setForm({ ...form, status: e.target.value })}
+                      style={{ marginTop: 4, fontSize: "0.9rem" }}
+                    >
+                      <option value="pendiente">Pendiente</option>
+                      <option value="pagado">Pagado</option>
+                      <option value="cancelado">Cancelado</option>
+                      <option value="en_proceso">En proceso</option>
+                      <option value="fabricado">Fabricado</option>
+                      <option value="espera_material">En espera de material</option>
+                      <option value="entregado">Entregado</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Sección 2: Productos */}
+                <div style={{ marginBottom: 12, flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 8,
+                      paddingBottom: 8,
+                      borderBottom: "2px solid #7b1531",
+                    }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#7b1531" }}>
+                      Productos agregados
+                    </h3>
+                    <button
+                      type="button"
+                      className="add-btn"
+                      onClick={handleAddProducto}
+                      style={{ padding: "6px 10px", fontSize: "0.85rem" }}
+                    >
+                      <FaPlus style={{ marginRight: 4 }} /> Agregar
+                    </button>
+                  </div>
+
+                  <div
+                    className="products-list"
+                    style={{
+                      maxHeight: 280,
+                      overflowY: "auto",
+                      paddingRight: 8,
+                    }}
+                  >
+                    {(form.productos || []).length === 0 ? (
+                      <div
+                        style={{
+                          color: "#999",
+                          fontSize: "0.85rem",
+                          textAlign: "center",
+                          padding: "20px 0",
+                          background: "#f9f9f9",
+                          borderRadius: 6,
+                        }}
+                      >
+                        No hay productos. Haz clic en "Agregar" para comenzar.
+                      </div>
+                    ) : (
+                      (form.productos || []).map((p, i) => {
+                        const productoId = p.productoId || p.ID_producto;
+                        const prodMatch = productos.find((pr) => pr.ID === productoId);
+                        return (
+                          <div
+                            key={`prod-${i}`}
+                            style={{
+                              background: "#fff",
+                              border: "1px solid #e0e0e0",
+                              borderRadius: 6,
+                              padding: "10px",
+                              marginBottom: 8,
+                              display: "grid",
+                              gridTemplateColumns: "60px 1fr 1fr auto",
+                              gap: 8,
+                              alignItems: "flex-start",
+                            }}
+                          >
+                            {/* Imagen del producto */}
+                            {prodMatch?.imagen && (
+                              <div
+                                style={{
+                                  width: 60,
+                                  height: 60,
+                                  borderRadius: 4,
+                                  overflow: "hidden",
+                                  background: "#f0f0f0",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gridRow: "1 / 3",
+                                }}
+                              >
+                                <img
+                                  src={prodMatch.imagen}
+                                  alt={prodMatch.nombre}
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              </div>
+                            )}
+                            <div>
+                              <label style={{ fontSize: "0.75rem", color: "#666" }}>Producto</label>
+                              <select
+                                className="user-input"
+                                value={String(productoId || "")}
+                                onChange={(e) =>
+                                  handleProductoChange(i, "productoId", Number(e.target.value))
+                                }
+                                style={{ fontSize: "0.85rem", padding: "6px" }}
+                              >
+                                <option value="">Selecciona…</option>
+                                {(productos || [])
+                                  .filter((pr) => pr.cantidad_m2 != null && pr.medida_por_unidad != null)
+                                  .map((pr) => (
+                                    <option key={pr.ID} value={String(pr.ID)}>
+                                      {pr.nombre} ({pr.cantidad_m2} m²)
+                                    </option>
+                                  ))}
+                              </select>
+                              {prodMatch && (
+                                <div style={{ fontSize: "0.75rem", color: "#999", marginTop: 4 }}>
+                                  {prodMatch.nombre}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "0.75rem", color: "#666" }}>m² totales</label>
+                              <input
+                                className="user-input"
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={p.cantidad ?? ""}
+                                onChange={(e) => handleProductoChange(i, "cantidad", e.target.value)}
+                                style={{ fontSize: "0.85rem", padding: "6px" }}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="delete-btn"
+                              onClick={() => handleRemoveProducto(i)}
+                              style={{ padding: "6px 8px", fontSize: "0.8rem", alignSelf: "flex-start", marginTop: "1.5rem" }}
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Sección 3: Totales y Anticipo */}
+                {(() => {
+                  const subtotal = (form.productos || []).reduce((acc, it) => {
+                    const pr = productos.find((p) => p.ID === it.productoId);
+                    const precioM2 = Number(pr?.precio || 0);
+                    const cantM2 = Number(it.cantidad || 0);
+                    return acc + precioM2 * cantM2;
+                  }, 0);
+                  const ivaVal = form.incluir_iva ? subtotal * 0.16 : 0;
+                  const total = subtotal + ivaVal;
+                  const sugerido = total * 0.7;
+                  const pct = total > 0 ? (Number(form.anticipo || 0) / total) * 100 : 0;
+
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {/* Totales */}
+                      <div style={{ padding: "12px", background: "#f0f7ff", borderRadius: 6 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: "0.85rem" }}>
+                          <div>
+                            <div style={{ color: "#666", fontWeight: 600 }}>Subtotal</div>
+                            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#111" }}>
+                              ${subtotal.toFixed(2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: "#666", fontWeight: 600 }}>
+                              IVA {form.incluir_iva ? "16%" : "no aplicado"}
+                            </div>
+                            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#111" }}>
+                              ${ivaVal.toFixed(2)}
+                            </div>
+                          </div>
+                          <div style={{ gridColumn: "1 / -1", paddingTop: 8, borderTop: "1px solid #ddd" }}>
+                            <div style={{ color: "#666", fontWeight: 600 }}>TOTAL</div>
+                            <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "#a30015" }}>
+                              ${total.toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Anticipo */}
+                      <div style={{ padding: "12px", background: "#fff9e6", borderRadius: 6 }}>
+                        <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "#666", display: "block", marginBottom: 6 }}>
+                          Anticipo *
+                        </label>
+                        <input
+                          className="user-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={form.anticipo ?? 0}
+                          onChange={(e) => setForm({ ...form, anticipo: Number(e.target.value) })}
+                          style={{ fontSize: "0.9rem", marginBottom: 8 }}
+                        />
+                        <div style={{ marginBottom: 6 }}>
+                          <div
+                            style={{
+                              height: 20,
+                              background: "#ecf0f1",
+                              borderRadius: 6,
+                              overflow: "hidden",
+                              position: "relative",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${Math.min(100, pct)}%`,
+                                height: "100%",
+                                background: pct >= 70 ? "#27ae60" : pct > 0 ? "#f39c12" : "#e74c3c",
+                                transition: "width 0.3s",
+                              }}
+                            />
+                            <span
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                color: pct > 15 ? "#fff" : "#333",
+                              }}
+                            >
+                              {pct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm({ ...form, anticipo: Number(sugerido.toFixed(2)) })
+                            }
+                            style={{
+                              flex: 1,
+                              background: "#2980b9",
+                              color: "#fff",
+                              border: "none",
+                              padding: "6px 10px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            70%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setForm({ ...form, anticipo: 0 })}
+                            style={{
+                              flex: 1,
+                              background: "#95a5a6",
+                              color: "#fff",
+                              border: "none",
+                              padding: "6px 10px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            0
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setForm({ ...form, anticipo: total })}
+                            style={{
+                              flex: 1,
+                              background: "#27ae60",
+                              color: "#fff",
+                              border: "none",
+                              padding: "6px 10px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              fontSize: "0.8rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            100%
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Botones de acción */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    marginTop: 14,
+                    paddingTop: 12,
+                    borderTop: "1px solid #e0e0e0",
+                  }}
+                >
+                  <button type="submit" className="add-btn" style={{ flex: 1, padding: "10px" }}>
+                    <FaSave style={{ marginRight: 6 }} />
+                    {modalOpen === "edit" ? "Actualizar" : "Guardar cotización"}
+                  </button>
+                  <button
+                    type="button"
+                    className="cancel-btn"
+                    onClick={closeModal}
+                    style={{ flex: 1, padding: "10px" }}
+                  >
+                    <FaTimes style={{ marginRight: 6 }} /> Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación para cancelar cotización */}
+        {showDeleteConfirm && (
+          <div className="modal-overlay">
+            <div
+              className="modal-content"
+              style={{
+                width: 380,
+                maxWidth: "90vw",
+                color: "#222",
+                position: "relative",
+              }}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteTarget(null);
+                  }}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
+              <h2
+                style={{ color: "#111", fontSize: "1.05rem", marginBottom: 10 }}
+              >
+                Confirmar cancelación
+              </h2>
+              <p style={{ marginBottom: 16 }}>
+                ¿Seguro que deseas cancelar la cotización #
+                {deleteTarget?.ID || deleteTarget?.id}? Esta acción no se puede
+                deshacer.
+              </p>
+              <div
+                style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}
+              >
+                <button
+                  className="cancel-btn"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteTarget(null);
+                  }}
+                >
+                  No, volver
+                </button>
+                <button
+                  className="delete-btn"
+                  onClick={() =>
+                    deleteTarget &&
+                    handleDelete(deleteTarget.ID || deleteTarget.id)
+                  }
+                >
+                  Sí, cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de detalles de cotización */}
+        {detailsOpen && (
+          <div className="modal-overlay" onClick={() => setDetailsOpen(false)}>
+            <div
+              className="modal-content"
+              style={{
+                width: "80vw",
+                maxWidth: 980,
+                maxHeight: "82vh",
+                overflowY: "auto",
+                color: "#111",
+                position: "relative",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  onClick={() => setDetailsOpen(false)}
+                >
+                  {/* X dibujada por CSS */}
+                </button>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+              >
+                <h2 style={{ fontSize: "1.2rem", marginBottom: 0 }}>
+                  Detalles de la cotización
+                </h2>
+                {(() => {
+                  const st = (
+                    detailsData?.cotizacion?.status || ""
+                  ).toLowerCase();
+                  return !!detailsData?.cotizacion && st === "pendiente";
+                })() && (
+                  <button
+                    className="add-btn"
+                    onClick={() => {
+                      const cot = detailsData.cotizacion;
+                      setDetailsOpen(false);
+                      openEditModal(cot);
+                    }}
+                    title="Editar esta cotización"
+                  >
+                    Editar esta cotización
+                  </button>
+                )}
+              </div>
+              {detailsLoading ? (
+                <p>Cargando detalles…</p>
+              ) : !detailsData ? (
+                <p>No se encontraron detalles.</p>
+              ) : (
+                (() => {
+                  const D = detailsData || {};
+                  const cot = D.cotizacion || D; // backend devuelve { cotizacion, productos }
+                  // Cliente con fallback a la lista si no viene anidado
+                  const cliente =
+                    cot.Cliente ||
+                    cot.cliente ||
+                    cot.customer ||
+                    clientes.find(
+                      (c) =>
+                        c.ID ===
+                        (cot.ID_cliente ||
+                          cot.id_cliente ||
+                          cot.clienteId ||
+                          cot.customerId)
+                    ) ||
+                    {};
+                  // Usuario/vendedor con fallback a un posible campo vendedor
+                  const usuario =
+                    cot.Usuario ||
+                    cot.usuario || { nombre: cot.vendedor } ||
+                    {};
+                  const fechaRaw =
+                    cot.fecha_creacion ||
+                    cot.createdAt ||
+                    cot.fecha ||
+                    cot.fecha_venta ||
+                    cot.fechaCotizacion;
+                  const fecha = fechaRaw
+                    ? new Date(fechaRaw).toLocaleString("es-MX")
+                    : "";
+                  const anticipo = Number(cot.anticipo ?? cot.advance ?? 0);
+                  const total = Number(
+                    cot.total ?? cot.importe ?? cot.monto ?? 0
+                  );
+                  const resto = (total - anticipo).toFixed(2);
+                  const prods =
+                    D.productos || D.items || cot.VentasProductos || [];
+                  const anticiposHist = D.anticipos || [];
+                  const anticiposMeta = D.anticipos_meta || null;
+                  const telefono =
+                    cliente?.telefono ||
+                    cliente?.tel ||
+                    cliente?.phone ||
+                    cliente?.celular ||
+                    "-";
+                  const rfc =
+                    cliente?.rfc || cliente?.RFC || cliente?.rfc_cliente || "-";
+                  const statusText = (
+                    (cot.status || cot.estado || cot.estatus || "") + ""
+                  ).toString();
+                  const direccion =
+                    cliente?.direccion ||
+                    [
+                      cliente?.calle,
+                      cliente?.colonia,
+                      cliente?.ciudad,
+                      cliente?.estado,
+                      cliente?.cp,
+                    ]
+                      .filter(Boolean)
+                      .join(", ");
+                  const idVenta =
+                    cot.ID ||
+                    cot.id ||
+                    cot.ID_venta ||
+                    cot.ventaId ||
+                    cot.cotizacionId ||
+                    cot.folio ||
+                    "";
+                  // Badge si hubo ajuste en la última edición (flag local por ID)
+                  const ajusteBadge = adjustFlags[idVenta];
+                  return (
+                    <div>
+                      {ajusteBadge && (
+                        <div
+                          style={{
+                            margin: "4px 0 8px",
+                            display: "inline-block",
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            background: "#006d32",
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: ".85rem",
+                          }}
+                        >
+                          Ajuste de inventario aplicado
+                        </div>
+                      )}
+                      <div className="details-grid">
+                        <div className="details-item">
+                          <div className="details-label">Cotización</div>
+                          <div className="details-value">#{idVenta || "-"}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Título</div>
+                          <div className="details-value">
+                            {cot.nombre || cot.titulo || "(sin título)"}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Cliente</div>
+                          <div className="details-value">
+                            {cliente?.nombre || cliente?.name || "-"}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Teléfono</div>
+                          <div className="details-value">{telefono}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">RFC</div>
+                          <div className="details-value">{rfc}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Dirección</div>
+                          <div className="details-value">
+                            {direccion || "-"}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Vendedor</div>
+                          <div className="details-value">
+                            {usuario?.nombre ||
+                              usuario?.name ||
+                              cot.vendedor ||
+                              "-"}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Fecha</div>
+                          <div className="details-value">{fecha || "-"}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Estado</div>
+                          <div className="details-value">
+                            {statusText ? (
+                              <span
+                                className={`status-badge status-${statusText.toLowerCase()}`}
+                              >
+                                {renderStatus(statusText)}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Anticipo</div>
+                          <div className="details-value">
+                            ${anticipo.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Total</div>
+                          <div className="details-value">
+                            ${total.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Resto</div>
+                          <div className="details-value">${resto}</div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Subtotal</div>
+                          <div className="details-value">
+                            $
+                            {(cot.subtotal || 0).toFixed
+                              ? cot.subtotal.toFixed(2)
+                              : Number(cot.subtotal || 0).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">IVA</div>
+                          <div className="details-value">
+                            $
+                            {(cot.iva || 0).toFixed
+                              ? cot.iva.toFixed(2)
+                              : Number(cot.iva || 0).toFixed(2)}{" "}
+                            {cot.incluir_iva ? "(aplicado)" : "(no aplicado)"}
+                          </div>
+                        </div>
+                        <div className="details-item">
+                          <div className="details-label">Progreso anticipo</div>
+                          <div
+                            className="details-value"
+                            style={{ minWidth: 140 }}
+                          >
+                            {(() => {
+                              const pct =
+                                total > 0 ? (anticipo / total) * 100 : 0;
+                              return (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 4,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      height: 8,
+                                      background: "#eee",
+                                      borderRadius: 4,
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: `${Math.min(100, pct).toFixed(
+                                          2
+                                        )}%`,
+                                        background:
+                                          pct >= 100
+                                            ? "#006d32"
+                                            : pct >= 70
+                                            ? "#ff9800"
+                                            : "#a30015",
+                                        height: "100%",
+                                      }}
+                                    />
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontSize: ".75rem",
+                                      color: "#444",
+                                    }}
+                                  >
+                                    {pct.toFixed(2)}%{" "}
+                                    {pct >= 100
+                                      ? "LIQUIDADO"
+                                      : pct >= 70
+                                      ? "MÍNIMO OK"
+                                      : "FALTA ANTICIPO"}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                      <h3
+                        style={{
+                          marginTop: 12,
+                          marginBottom: 8,
+                          fontSize: "1.05rem",
+                        }}
+                      >
+                        Productos
+                      </h3>
+                      {prods.length === 0 ? (
+                        <p>Sin productos.</p>
+                      ) : (
+                        <div className="products-list">
+                          {prods.map((p, i) => {
+                            const prodMatch = productos.find(
+                              (pr) =>
+                                pr.ID ===
+                                (p.productoId ||
+                                  p.ID_producto ||
+                                  p.idProducto ||
+                                  p.productId)
+                            );
+                            const nombreProd =
+                              p.Producto?.nombre ||
+                              prodMatch?.nombre ||
+                              p.nombre ||
+                              "";
+                            const imgUrl =
+                              prodMatch?.imagen ||
+                              prodMatch?.image ||
+                              prodMatch?.img ||
+                              prodMatch?.foto ||
+                              prodMatch?.foto_url ||
+                              p.imagen ||
+                              null;
+                            const medidas = p.medidas || p.tamano || "";
+                            return (
+                              <div
+                                key={`${i}-${
+                                  p.productoId || p.ID_producto || "prod"
+                                }`}
+                                className="product-card"
+                              >
+                                <div className="product-card-header">
+                                  Producto {i + 1}
+                                </div>
+                                {imgUrl ? (
+                                  <img
+                                    src={imgUrl}
+                                    alt={nombreProd || `Producto ${i + 1}`}
+                                    className="product-thumb"
+                                  />
+                                ) : (
+                                  <div className="product-thumb product-thumb--placeholder">
+                                    Sin imagen
+                                  </div>
+                                )}
+                                <div className="product-grid">
+                                  <div className="product-field">
+                                    <label>Producto</label>
+                                    <div>{nombreProd}</div>
+                                  </div>
+                                  <div className="product-field">
+                                    <label>Cantidad</label>
+                                    <div>{p.cantidad ?? 1}</div>
+                                  </div>
+                                  <div className="product-field">
+                                    <label>m²</label>
+                                    <div>
+                                      {(p.total_m2 ?? "").toString() || "-"}
+                                    </div>
+                                  </div>
+                                  <div className="product-field">
+                                    <label>Figura</label>
+                                    <div>{p.tipoFigura || "-"}</div>
+                                  </div>
+                                  {p.tipoFigura === "circulo" && (
+                                    <div className="product-field">
+                                      <label>Radio</label>
+                                      <div>{p.radio || "-"}</div>
+                                    </div>
+                                  )}
+                                  {(p.tipoFigura === "ovalo" ||
+                                    p.tipoFigura === "rectangulo" ||
+                                    p.tipoFigura === "cuadrado" ||
+                                    p.tipoFigura === "L" ||
+                                    p.tipoFigura === "L invertida") && (
+                                    <>
+                                      {"base" in p && (
+                                        <div className="product-field">
+                                          <label>Base</label>
+                                          <div>{p.base || "-"}</div>
+                                        </div>
+                                      )}
+                                      {"altura" in p && (
+                                        <div className="product-field">
+                                          <label>Altura</label>
+                                          <div>{p.altura || "-"}</div>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                  {("base2" in p || "altura2" in p) && (
+                                    <>
+                                      {"base2" in p && (
+                                        <div className="product-field">
+                                          <label>Base 2</label>
+                                          <div>{p.base2 || "-"}</div>
+                                        </div>
+                                      )}
+                                      {"altura2" in p && (
+                                        <div className="product-field">
+                                          <label>Altura 2</label>
+                                          <div>{p.altura2 || "-"}</div>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                  {("soclo_base" in p ||
+                                    "soclo_altura" in p) && (
+                                    <>
+                                      <div className="product-field">
+                                        <label>Soclo Base</label>
+                                        <div>{p.soclo_base || "-"}</div>
+                                      </div>
+                                      <div className="product-field">
+                                        <label>Soclo Altura</label>
+                                        <div>{p.soclo_altura || "-"}</div>
+                                      </div>
+                                    </>
+                                  )}
+                                  {("cubierta_base" in p ||
+                                    "cubierta_altura" in p) && (
+                                    <>
+                                      <div className="product-field">
+                                        <label>Cubierta Base</label>
+                                        <div>{p.cubierta_base || "-"}</div>
+                                      </div>
+                                      <div className="product-field">
+                                        <label>Cubierta Altura</label>
+                                        <div>{p.cubierta_altura || "-"}</div>
+                                      </div>
+                                    </>
+                                  )}
+                                  {!!medidas && (
+                                    <div className="product-field product-field--full">
+                                      <label>Medidas</label>
+                                      <div>{medidas}</div>
+                                    </div>
+                                  )}
+                                  {("ancho" in p || "largo" in p) && (
+                                    <>
+                                      {"ancho" in p && (
+                                        <div className="product-field">
+                                          <label>Ancho</label>
+                                          <div>{p.ancho || "-"}</div>
+                                        </div>
+                                      )}
+                                      {"largo" in p && (
+                                        <div className="product-field">
+                                          <label>Largo</label>
+                                          <div>{p.largo || "-"}</div>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                  {"descripcion" in p && (
+                                    <div className="product-field product-field--full">
+                                      <label>Descripción</label>
+                                      <div>{p.descripcion || "-"}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          marginTop: 14,
+                        }}
+                      >
+                        <button
+                          className="cancel-btn"
+                          onClick={() => setDetailsOpen(false)}
+                        >
+                          Cerrar
+                        </button>
+                      </div>
+                      {/* Historial de anticipos */}
+                      <h3
+                        style={{
+                          marginTop: 22,
+                          marginBottom: 8,
+                          fontSize: "1.05rem",
+                        }}
+                      >
+                        Historial de anticipos
+                      </h3>
+                      {anticiposHist.length === 0 ? (
+                        <p>Sin anticipos registrados.</p>
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table
+                            className="residuos-table"
+                            style={{ minWidth: 520 }}
+                          >
+                            <thead>
+                              <tr>
+                                <th>Fecha</th>
+                                <th>Monto</th>
+                                <th>Usuario</th>
+                                <th>Observaciones</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {anticiposHist.map((a) => (
+                                <tr key={a.id}>
+                                  <td>
+                                    {a.fecha
+                                      ? new Date(a.fecha).toLocaleString(
+                                          "es-MX"
+                                        )
+                                      : "-"}
+                                  </td>
+                                  <td>${Number(a.monto || 0).toFixed(2)}</td>
+                                  <td>{a.usuario || "-"}</td>
+                                  <td>{a.observaciones || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {anticiposMeta &&
+                        (() => {
+                          const total = Number(anticiposMeta.total_orden || 0);
+                          const anticipoTot = Number(
+                            anticiposMeta.anticipo_total || 0
+                          );
+                          const pct = total > 0 ? anticipoTot / total : 0;
+                          let badgeText = "No pagado";
+                          let badgeColor = "#c0392b";
+                          if (anticipoTot >= total && total > 0) {
+                            badgeText = "Liquidado";
+                            badgeColor = "#2ecc71";
+                          } else if (pct >= 0.7) {
+                            badgeText = "Anticipo ≥ 70%";
+                            badgeColor = "#27ae60";
+                          } else if (anticipoTot > 0) {
+                            badgeText = "Pago parcial";
+                            badgeColor = "#f39c12";
+                          }
+                          return (
+                            <div
+                              style={{
+                                marginTop: 10,
+                                fontSize: ".85rem",
+                                color: "#444",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div>
+                                <strong>Anticipo total:</strong> $
+                                {anticipoTot.toFixed(2)} |{" "}
+                                <strong>Saldo pendiente:</strong> $
+                                {anticiposMeta.saldo_pendiente} de $
+                                {total.toFixed(2)}
+                              </div>
+                              <span
+                                style={{
+                                  background: badgeColor,
+                                  color: "#fff",
+                                  padding: "3px 8px",
+                                  borderRadius: 6,
+                                  fontSize: ".8rem",
+                                }}
+                              >
+                                {badgeText}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de resumen de confirmación de inventario */}
+        {confirmSummaryOpen && (
+          <div
+            className="modal-overlay"
+            onClick={() => setConfirmSummaryOpen(false)}
+          >
+            <div
+              className="modal-content"
+              style={{
+                width: 520,
+                maxWidth: "92vw",
+                maxHeight: "75vh",
+                overflowY: "auto",
+                color: "#111",
+                position: "relative",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-close-row">
+                <button
+                  className="modal-close-btn"
+                  title="Cerrar"
+                  aria-label="Cerrar"
+                  onClick={() => setConfirmSummaryOpen(false)}
+                />
+              </div>
+              <h2 style={{ fontSize: "1.1rem", marginBottom: 10 }}>
+                Venta confirmada (inventario no descontado automáticamente)
+              </h2>
+              <div
+                style={{
+                  fontSize: ".8rem",
+                  lineHeight: 1.3,
+                  background: "#fffbe6",
+                  border: "1px solid #ffe58f",
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                }}
+              >
+                Esta confirmación solo actualizó el estado de la venta a{" "}
+                <strong>{confirmSummary?.status_aplicado}</strong>. El
+                inventario no fue modificado. Descuenta manualmente las piezas
+                necesarias en la pantalla de inventario y registra cualquier
+                residuo de forma manual.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  marginTop: 16,
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button
+                  className="ventas-btn"
+                  onClick={() => {
+                    setConfirmSummaryOpen(false);
+                    navigate("/residuos");
+                  }}
+                >
+                  Ver Residuos
+                </button>
+                <button
+                  className="cancel-btn"
+                  onClick={() => setConfirmSummaryOpen(false)}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Reportes de Ventas */}
+        {reportOpen && (
+          <div className="modal-overlay report-modal">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3><FaFilePdf /> Reporte de Ventas</h3>
+                <button className="close-modal" onClick={closeReport}>×</button>
+              </div>
+
+              {!reportData ? (
+                // Formulario de filtros
+                <div className="modal-body">
+                  <div className="report-filters">
+                    <h4><FaUser /> Filtros del Reporte</h4>
+                    <div className="filter-grid">
+                      {/* Selector de Cliente */}
+                      <div className="filter-group">
+                        <label className="filter-label">Cliente:</label>
+                        <select
+                          className="filter-select"
+                          value={reportFilters.cliente}
+                          onChange={(e) => setReportFilters({...reportFilters, cliente: e.target.value})}
+                        >
+                          <option value="">Seleccionar cliente específico</option>
+                          <option value="all">Todos los clientes</option>
+                          {clientes.map(cliente => (
+                            <option key={cliente.ID} value={cliente.ID}>
+                              {cliente.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Rango de Fechas */}
+                      <div className="filter-group">
+                        <label className="filter-label">Rango de Fechas:</label>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                          <input
+                            type="date"
+                            className="filter-input"
+                            placeholder="Fecha Inicio"
+                            value={reportFilters.fechaInicio}
+                            onChange={(e) => setReportFilters({...reportFilters, fechaInicio: e.target.value})}
+                          />
+                          <input
+                            type="date"
+                            className="filter-input"
+                            placeholder="Fecha Fin"
+                            value={reportFilters.fechaFin}
+                            onChange={(e) => setReportFilters({...reportFilters, fechaFin: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Estados a incluir */}
+                    <div className="filter-group" style={{ gridColumn: "1 / -1" }}>
+                      <label className="filter-label">Estados a incluir:</label>
+                      <div className="estados-grid">
+                        {['pendiente', 'pagado', 'cancelado', 'en_proceso', 'fabricado', 'espera_material', 'entregado'].map(estado => (
+                          <label key={estado} className="estado-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={reportFilters.estados.includes(estado)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setReportFilters({
+                                    ...reportFilters,
+                                    estados: [...reportFilters.estados, estado]
+                                  });
+                                } else {
+                                  setReportFilters({
+                                    ...reportFilters,
+                                    estados: reportFilters.estados.filter(s => s !== estado)
+                                  });
+                                }
+                              }}
+                            />
+                            {renderStatus(estado)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {errorMsg && (
+                    <div className="report-error">
+                      <FaTimes style={{ marginRight: "0.5rem" }} />
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  <div className="modal-actions">
+                    <button
+                      onClick={generateSalesReport}
+                      disabled={reportLoading}
+                      className="modal-btn primary"
+                    >
+                      <FaFilePdf />
+                      {reportLoading ? "Generando..." : "Generar Reporte"}
+                    </button>
+                    <button onClick={closeReport} className="modal-btn cancel">
+                      <FaTimes />
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Mostrar resultados del reporte
+                <div className="modal-body">
+                  <div className="report-results">
+                    <div className="report-title">
+                      <h4>Reporte de Ventas</h4>
+                      <p className="report-subtitle">
+                        Generado el {reportData.fechaGeneracion}
+                      </p>
+                    </div>
+
+                    {/* Resumen General */}
+                    <div className="report-summary-card">
+                      <h5><FaFilePdf /> Resumen General</h5>
+                      <div className="summary-grid">
+                        <div className="summary-item">
+                          <div className="summary-value">{reportData.resumen.totalCotizaciones}</div>
+                          <div className="summary-label">Total Cotizaciones</div>
+                        </div>
+                        <div className="summary-item">
+                          <div className="summary-value">${reportData.resumen.totalVentas.toLocaleString('es-MX', {minimumFractionDigits: 2})}</div>
+                          <div className="summary-label">Total Ventas</div>
+                        </div>
+                        <div className="summary-item">
+                          <div className="summary-value">${reportData.resumen.totalAnticipos.toLocaleString('es-MX', {minimumFractionDigits: 2})}</div>
+                          <div className="summary-label">Total Anticipos</div>
+                        </div>
+                        <div className="summary-item">
+                          <div className="summary-value">${reportData.resumen.totalPendiente.toLocaleString('es-MX', {minimumFractionDigits: 2})}</div>
+                          <div className="summary-label">Saldo Pendiente</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Resumen por Estado */}
+                    <div className="report-section">
+                      <h5><FaEdit /> Por Estado</h5>
+                      <div className="report-table-container">
+                        <table className="report-table">
+                          <thead>
+                            <tr>
+                              <th>Estado</th>
+                              <th style={{ textAlign: "right" }}>Cantidad</th>
+                              <th style={{ textAlign: "right" }}>Total</th>
+                              <th style={{ textAlign: "right" }}>Anticipos</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(reportData.resumen.porEstado).map(([estado, datos]) => (
+                              <tr key={estado}>
+                                <td>
+                                  <span className={`status-badge ${estado}`}>
+                                    {renderStatus(estado)}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  {datos.cantidad}
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  ${datos.total.toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  ${datos.anticipos.toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  {/* Resumen por Cliente (solo si se seleccionó "todos") */}
+                  {reportData.resumen.porCliente.length > 0 && (
+                    <div className="report-section">
+                      <h5><FaUsers /> Por Cliente</h5>
+                      <div className="report-table-container">
+                        <table className="report-table">
+                          <thead>
+                            <tr>
+                              <th>Cliente</th>
+                              <th style={{ textAlign: "right" }}>Cantidad</th>
+                              <th style={{ textAlign: "right" }}>Total</th>
+                              <th style={{ textAlign: "right" }}>Anticipos</th>
+                              <th style={{ textAlign: "right" }}>Pendiente</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportData.resumen.porCliente
+                              .sort((a, b) => b.total - a.total)
+                              .map((cliente, idx) => (
+                              <tr key={idx}>
+                                <td>
+                                  <span className="client-name">
+                                    {cliente.nombre}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  {cliente.cantidad}
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span className="price-display">
+                                    ${cliente.total.toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span className="price-display">
+                                    ${cliente.anticipos.toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span className="price-display">
+                                    ${(cliente.total - cliente.anticipos).toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista detallada de cotizaciones */}
+                  <div className="report-section">
+                    <h5><FaFileAlt /> Detalle de Cotizaciones ({reportData.cotizaciones.length})</h5>
+                    <div className="report-table-container scrollable" style={{ maxHeight: "300px" }}>
+                      <table className="report-table">
+                        <thead style={{ position: "sticky", top: 0, background: "white" }}>
+                          <tr>
+                            <th style={{ textAlign: "left" }}>ID</th>
+                            <th style={{ textAlign: "left" }}>Fecha</th>
+                            <th style={{ textAlign: "left" }}>Cliente</th>
+                            <th style={{ textAlign: "left" }}>Título</th>
+                            <th style={{ textAlign: "center" }}>Estado</th>
+                            <th style={{ textAlign: "right" }}>Total</th>
+                            <th style={{ textAlign: "right" }}>Anticipo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportData.cotizaciones.map((cot) => {
+                            const cliente = clientes.find(c => c.ID === cot.ID_cliente);
+                            return (
+                              <tr key={cot.ID}>
+                                <td>
+                                  <span className="id-display">#{cot.ID}</span>
+                                </td>
+                                <td>
+                                  <span className="date-display">
+                                    {new Date(cot.fecha_creacion).toLocaleDateString('es-MX')}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="client-name">
+                                    {cliente?.nombre || `Cliente ${cot.ID_cliente}`}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span className="title-display">
+                                    {cot.nombre || '-'}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "center" }}>
+                                  <span className={`status-badge ${cot.status}`}>
+                                    {renderStatus(cot.status)}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span className="price-display">
+                                    ${Number(cot.total || 0).toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span className="price-display">
+                                    ${Number(cot.anticipo || 0).toLocaleString('es-MX', {minimumFractionDigits: 2})}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="modal-actions">
+                    <button
+                      onClick={() => {
+                        setReportData(null);
+                        setErrorMsg('');
+                      }}
+                      className="confirm-btn"
+                      style={{
+                        background: "#1e40af",
+                        color: "white",
+                        border: "none",
+                        padding: "0.75rem 1.5rem",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontWeight: "600"
+                      }}
+                    >
+                      Nuevo Reporte
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Función para exportar/imprimir
+                        window.print();
+                      }}
+                      className="modal-btn secondary"
+                    >
+                      <FaPrint />
+                      Imprimir
+                    </button>
+                    <button onClick={closeReport} className="cancel-btn">
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Sells;
